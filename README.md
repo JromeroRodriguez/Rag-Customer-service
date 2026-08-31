@@ -8,7 +8,7 @@ Funciona de forma **100% local y con $0 costos de API** utilizando **Ollama** (`
 
 ---
 
-## 🚀 Características Principales
+## Características Principales
 
 - **Base de Conocimiento RAG Oficial**: Respuestas fundamentadas exclusivamente en los documentos de la academia (`data/documents/`), evitando alucinaciones.
 - **Chat Bidireccional en Tiempo Real (Web ⟷ Telegram)**:
@@ -31,7 +31,7 @@ Funciona de forma **100% local y con $0 costos de API** utilizando **Ollama** (`
 
 ---
 
-## 🏗️ Arquitectura del Sistema
+##  Arquitectura del Sistema
 
 ```
  [Navegador del Estudiante]
@@ -52,7 +52,7 @@ Funciona de forma **100% local y con $0 costos de API** utilizando **Ollama** (`
 
 ---
 
-## 📁 Estructura del Proyecto
+##  Estructura del Proyecto
 
 ```
 academia-idiomas-rag/
@@ -93,7 +93,7 @@ academia-idiomas-rag/
 
 ---
 
-## ⚙️ Requisitos Previos
+##  Requisitos Previos
 
 - **Node.js**: v18 o superior.
 - **Docker**: Para ejecutar la base de datos vectorial ChromaDB.
@@ -105,7 +105,7 @@ academia-idiomas-rag/
 
 ---
 
-## 🛠️ Instalación y Puesta en Marcha
+##  Instalación y Puesta en Marcha
 
 ### 1. Clonar e Instalar Dependencias
 ```bash
@@ -165,7 +165,7 @@ La aplicación web estará disponible en **`http://localhost:3000`**.
 
 ---
 
-## 📦 Paquetes de Distribución
+##  Paquetes de Distribución
 
 El proyecto incluye archivos comprimidos listos para desplegar:
 - **`riwi-lingua-proyecto-completo.zip`**: Código fuente completo y optimizado (sin `node_modules`).
