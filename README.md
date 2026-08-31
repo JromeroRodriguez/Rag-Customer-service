@@ -148,7 +148,7 @@ La aplicación web estará disponible en **`http://localhost:3000`**.
 
 ---
 
-## 📱 Flujo del Chat Bidireccional (Web ⟷ Telegram)
+##  Flujo del Chat Bidireccional (Web ⟷ Telegram)
 
 1. **Solicitud de Asesor:**
    El estudiante escribe en la web: *"Quiero inscribirme en el curso de inglés intensivo"*.
