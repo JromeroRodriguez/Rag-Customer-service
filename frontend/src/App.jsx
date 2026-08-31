@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Navbar } from "./components/Navbar";
 import { HeroSection } from "./components/HeroSection";
 import { ProgramsSection } from "./components/ProgramsSection";
@@ -11,6 +11,9 @@ import { Bot } from "lucide-react";
 
 export function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isLiveAdvisorActive, setIsLiveAdvisorActive] = useState(false);
+  const [sessionId, setSessionId] = useState(() => "std_" + Math.random().toString(36).substring(2, 8));
+
   const [messages, setMessages] = useState([
     {
       id: "welcome-1",
@@ -24,6 +27,96 @@ export function App() {
   ]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Subscribe to real-time live chat SSE stream + Polling fallback for human advisor replies
+  useEffect(() => {
+    const handleIncomingAdvisorMessage = (incomingMsg) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === incomingMsg.id)) {
+          return prev; // Avoid duplicates
+        }
+        return [
+          ...prev,
+          {
+            id: incomingMsg.id,
+            role: "human_advisor",
+            content: incomingMsg.content,
+            timestamp:
+              incomingMsg.timestamp ||
+              new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            isHumanAdvisor: true,
+          },
+        ];
+      });
+      setIsDrawerOpen(true);
+    };
+
+    // 1. SSE Connection
+    let eventSource = null;
+    try {
+      eventSource = new EventSource(`/api/live-chat/stream/${sessionId}`);
+
+      eventSource.addEventListener("advisor_message", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleIncomingAdvisorMessage(data);
+        } catch (err) {
+          console.error("Error parsing advisor message:", err);
+        }
+      });
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.role === "human_advisor") {
+            handleIncomingAdvisorMessage(data);
+          }
+        } catch {
+          // Ignore heartbeat or non-json
+        }
+      };
+    } catch (e) {
+      console.warn("SSE initialization error:", e);
+    }
+
+    // 2. Polling fallback every 2.5 seconds
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/live-chat/messages/${sessionId}`);
+        if (res.ok) {
+          const { messages: incomingList } = await res.json();
+          if (Array.isArray(incomingList)) {
+            incomingList.forEach(handleIncomingAdvisorMessage);
+          }
+        }
+      } catch {
+        // Silent network fallback
+      }
+    }, 2500);
+
+    return () => {
+      eventSource?.close();
+      clearInterval(pollInterval);
+    };
+  }, [sessionId]);
+
+  const [studentName, setStudentName] = useState(() => sessionStorage.getItem("riwi_student_name") || "");
+  const [pendingEscalation, setPendingEscalation] = useState(null);
+
+  const handleEndLiveAdvisor = async () => {
+    setIsLiveAdvisorActive(false);
+    fetch(`/api/live-chat/end/${sessionId}`, { method: "POST" }).catch(() => {});
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `sys-${Date.now()}`,
+        role: "assistant",
+        content:
+          "Has regresado al modo **Asistente Virtual Lingua (IA)**. ¿En qué más te puedo colaborar hoy?",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
+    ]);
+  };
+
   const handleSendMessage = async (questionText) => {
     if (!questionText.trim() || isLoading) return;
 
@@ -32,16 +125,64 @@ export function App() {
       role: "user",
       content: questionText,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      status: isLiveAdvisorActive ? "Enviado al asesor" : undefined,
     };
 
     setMessages((prev) => [...prev, userMsg]);
+
+    // If waiting for the student's name to connect with advisor
+    if (pendingEscalation) {
+      const cleanName = questionText.trim();
+      setStudentName(cleanName);
+      sessionStorage.setItem("riwi_student_name", cleanName);
+
+      // Trigger Telegram alert with real student name
+      fetch("/api/live-chat/escalate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          studentName: cleanName,
+          question: pendingEscalation.question,
+          answer: pendingEscalation.answer,
+        }),
+      }).catch(() => {});
+
+      setIsLiveAdvisorActive(true);
+      const escalationContext = pendingEscalation;
+      setPendingEscalation(null);
+
+      const confirmMsg = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: `¡Mucho gusto, **${cleanName}**! Le acabo de transferir tu consulta a nuestro asesor humano en Telegram.\n\nEn un momento te responderá directamente por aquí.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      setMessages((prev) => [...prev, confirmMsg]);
+      return;
+    }
+
+    // If already talking with a live human advisor, forward directly to Telegram (NO LLM)
+    if (isLiveAdvisorActive) {
+      try {
+        await fetch("/api/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: questionText, sessionId, studentName }),
+        });
+      } catch (err) {
+        console.error("Error forwarding to advisor:", err);
+      }
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const res = await fetch("/api/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: questionText }),
+        body: JSON.stringify({ question: questionText, sessionId, studentName }),
       });
 
       const data = await res.json();
@@ -50,17 +191,36 @@ export function App() {
         throw new Error(data.error || "Error en el procesamiento de la consulta.");
       }
 
-      const assistantMsg = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.answer,
-        escalated: Boolean(data.escalated),
-        sources: data.sources || [],
-        usage: data.usage || null,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
+      // If escalation requires the student's name, ask for it before alerting Telegram
+      if (data.requiresName) {
+        setPendingEscalation({ question: questionText, answer: data.answer });
+        const namePromptMsg = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content:
+            "Con gusto te conecto con un asesor humano de admisiones y ventas. Para poder atenderte mejor, **¿cuál es tu nombre completo?**",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setMessages((prev) => [...prev, namePromptMsg]);
+        return;
+      }
 
-      setMessages((prev) => [...prev, assistantMsg]);
+      if (data.escalated) {
+        setIsLiveAdvisorActive(true);
+      }
+
+      if (data.answer) {
+        const assistantMsg = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: data.answer,
+          escalated: Boolean(data.escalated),
+          sources: data.sources || [],
+          usage: data.usage || null,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      }
     } catch (err) {
       console.error("Query error:", err);
       const errorMsg = {
@@ -78,15 +238,28 @@ export function App() {
   };
 
   const handleReset = () => {
+    // Notify backend to clean old session history
+    fetch(`/api/live-chat/reset/${sessionId}`, { method: "POST" }).catch(() => {});
+
+    // Generate a fresh session ID
+    const newSession = "std_" + Math.random().toString(36).substring(2, 8);
+    setSessionId(newSession);
+
+    // Reset local states
+    setIsLiveAdvisorActive(false);
+    setStudentName("");
+    setPendingEscalation(null);
+    sessionStorage.removeItem("riwi_student_name");
+
     setMessages([
       {
         id: "welcome-1",
         role: "assistant",
         content:
-          "¡Hola! Soy Lingua, la asistente virtual de **Riwi Lingua** en Barranquilla.\n\n¿En qué te puedo ayudar hoy con respecto a horarios, precios, certificaciones o matrículas?",
+          "¡Hola! Soy Lingua, la asistente virtual de **Riwi Lingua** en Barranquilla.\n\nPuedo orientarte sobre nuestros programas de **Inglés, Francés y Portugués**, precios, modalidades (Presencial, Live Online y Self-Paced), horarios, requisitos de certificación y proceso de matrícula.\n\n¿En qué te puedo colaborar hoy?",
         timestamp: "Inicio",
         escalated: false,
-        sources: [],
+        sources: ["schedules-and-modalities.md", "pricing-and-levels.md"],
       },
     ]);
   };
@@ -146,6 +319,8 @@ export function App() {
         isLoading={isLoading}
         onSendMessage={handleSendMessage}
         onReset={handleReset}
+        isLiveAdvisorActive={isLiveAdvisorActive}
+        onEndLiveAdvisor={handleEndLiveAdvisor}
       />
     </div>
   );

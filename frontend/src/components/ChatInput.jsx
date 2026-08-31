@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Send, Loader2, Sparkles } from "lucide-react";
 
-export function ChatInput({ onSendMessage, isLoading }) {
+export function ChatInput({ onSendMessage, isLoading, placeholder }) {
   const [input, setInput] = useState("");
   const textareaRef = useRef(null);
 
@@ -37,7 +37,7 @@ export function ChatInput({ onSendMessage, isLoading }) {
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Pregunta sobre cursos, precios, horarios, certificaciones..."
+        placeholder={placeholder || "Pregunta sobre cursos, precios, horarios, certificaciones..."}
         disabled={isLoading}
         className="w-full resize-none bg-transparent px-2 sm:px-3 py-1.5 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none max-h-32 disabled:opacity-50"
       />

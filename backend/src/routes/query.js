@@ -3,6 +3,7 @@ import { retrieveRelevantChunks } from "../rag/retriever.js";
 import { buildMessages } from "../llm/promptBuilder.js";
 import { generateAnswer } from "../llm/ollamaClient.js";
 import { shouldEscalate } from "../services/escalation.js";
+import { notifyAdvisorTelegram, isLiveSession, forwardStudentMessageToAdvisor } from "../services/liveChat.js";
 
 export const queryRouter = Router();
 
@@ -10,44 +11,54 @@ export const queryRouter = Router();
 const recentEscalations = new Set();
 
 queryRouter.post("/query", async (req, res) => {
-  const { question } = req.body ?? {};
+  const { question, sessionId, studentName } = req.body ?? {};
 
   if (!question || typeof question !== "string" || !question.trim()) {
     return res.status(400).json({ error: "Field 'question' is required." });
   }
 
+  // If the session is already in Live Advisor Mode, DO NOT query LLM
+  if (sessionId && isLiveSession(sessionId)) {
+    console.log(`[query] Session ${sessionId} is in LIVE ADVISOR MODE. Forwarding to Telegram (LLM bypassed).`);
+    await forwardStudentMessageToAdvisor(sessionId, question);
+    return res.json({
+      answer: null,
+      inLiveChat: true,
+      forwardedToAdvisor: true,
+      escalated: true,
+    });
+  }
+
   try {
+    const isFromN8n =
+      Boolean(req.headers["x-source"] === "n8n") ||
+      Boolean(req.query.fromN8n) ||
+      Boolean(req.headers["user-agent"]?.toLowerCase().includes("axios"));
+
     const { chunks, inScope } = await retrieveRelevantChunks(question);
     const messages = buildMessages(question, chunks);
     const { text, usage } = await generateAnswer(messages);
 
     const escalated = shouldEscalate(inScope, text, question);
 
-    // If escalated, trigger n8n automation so the advisor receives the Telegram alert
-    if (escalated) {
-      const cacheKey = question.trim().toLowerCase();
+    // If escalated and student name is already known, notify advisor immediately
+    if (escalated && !isFromN8n && studentName) {
+      const cacheKey = `${sessionId || "std"}:${question.trim().toLowerCase()}`;
+
       if (!recentEscalations.has(cacheKey)) {
         recentEscalations.add(cacheKey);
-        setTimeout(() => recentEscalations.delete(cacheKey), 20000);
+        setTimeout(() => recentEscalations.delete(cacheKey), 30000);
 
-        const n8nWebhook =
-          process.env.N8N_WEBHOOK_URL ||
-          "http://localhost:5678/webhook/linguabridge-query";
-
-        fetch(n8nWebhook, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Source": "web-chat" },
-          body: JSON.stringify({ question }),
-        }).catch((err) => {
-          // Non-blocking: log silently if n8n is offline or busy
-          console.warn("[escalation] n8n trigger notice:", err.message);
-        });
+        const activeSession = sessionId || `guest_${Date.now()}`;
+        console.log(`[query] Sending interactive escalation ticket to Telegram for student: ${studentName}`);
+        notifyAdvisorTelegram({ sessionId: activeSession, studentName, question, answer: text });
       }
     }
 
     return res.json({
       answer: text,
       escalated,
+      requiresName: escalated && !studentName,
       sources: chunks.map((c) => c.source),
       usage,
     });
