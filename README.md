@@ -1,161 +1,171 @@
-# LinguaBridge RAG Assistant
+# Riwi Lingua — Asistente RAG y Chat Bidireccional en Vivo
 
-An intelligent customer support assistant for **LinguaBridge Academy** (a fictional Colombian language academy), built for RIWI's Module 5.7 — AI Automatizador performance test.
+Asistente virtual inteligente para **Riwi Lingua** (academia de idiomas en Barranquilla), diseñado para orientar a estudiantes sobre cursos de **Inglés, Francés y Portugués**, modalidades (Presencial, Live Online y Self-Paced), precios, horarios, certificaciones y matrículas.
 
-The assistant answers questions about schedules, pricing, levels, enrollment, and certifications **using only the academy's own business documents**, and escalates to a human advisor whenever a question falls outside what those documents cover.
+Cuenta con un canal de **Chat Bidireccional en Vivo con Telegram** que permite transferir prospectos y consultas complejas a asesores humanos en tiempo real.
 
-This version runs **100% locally and offline with $0 API costs** using **Ollama** (`gemma3:4b` + `nomic-embed-text`) and **ChromaDB**.
+Funciona de forma **100% local y con $0 costos de API** utilizando **Ollama** (`gemma3:4b` + `nomic-embed-text`) y **ChromaDB**.
 
-## Architecture
+---
+
+## 🚀 Características Principales
+
+- **Base de Conocimiento RAG Oficial**: Respuestas fundamentadas exclusivamente en los documentos de la academia (`data/documents/`), evitando alucinaciones.
+- **Chat Bidireccional en Tiempo Real (Web ⟷ Telegram)**:
+  - Cuando un estudiante solicita atención humana o ventas, se genera un ticket en vivo.
+  - El asesor recibe la alerta en Telegram y puede responder directamente con **Responder (Reply)**.
+  - La respuesta del asesor aparece en vivo en la pantalla del estudiante en menos de 1 segundo mediante **Server-Sent Events (SSE)** y sondeo de respaldo.
+- **Captura Conversacional de Leads (Nombre + WhatsApp)**:
+  - Antes de alertar al asesor, Lingua solicita de manera natural el **Nombre completo** y el **Número de WhatsApp/Teléfono** del estudiante para no perder el prospecto.
+- **Silenciado Inteligente de IA (LLM Bypass)**:
+  - Una vez iniciada la atención con el asesor humano, la IA no interrumpe la conversación. Los mensajes subsiguientes del estudiante se envían directamente al Telegram del asesor.
+- **Comandos de Gestión para el Asesor (`/cerrar` o `/fin`)**:
+  - El asesor puede escribir `/cerrar` en Telegram para finalizar la atención y devolver al estudiante al Asistente Lingua (IA) automáticamente.
+- **Detección de Desconexión del Estudiante**:
+  - Si el estudiante cierra la ventana del navegador, el bot le avisa al asesor en Telegram junto con el WhatsApp del estudiante para seguimiento.
+- **Interfaz Moderna**:
+  - Landing page completa construida con **React 19**, **Tailwind CSS v4**, **Vite** y **Lucide Icons**.
+  - Modal de chat centrado, soporte de Markdown enriquecido (negritas, viñetas, enlaces clickeables), y diseño responsive para móviles y escritorio.
+- **Automatización con n8n**:
+  - Flujo exportado en `n8n/workflow.json` para integración con webhooks externos.
+
+---
+
+## 🏗️ Arquitectura del Sistema
 
 ```
-[Web Form] --POST /api/query--> [Express Backend]
-                                       |
-                          1. Retriever (Chroma + Ollama nomic-embed-text)
-                          2. Prompt Builder (system prompt + few-shots + context)
-                          3. Ollama Chat API (gemma3:4b generation)
-                          4. Escalation check
-                                       |
-                                  JSON response
-                                       |
-                         [n8n workflow can call the same endpoint]
+ [Navegador del Estudiante]
+           │
+           ├── (POST /api/query) ──────────────► [Backend Express]
+           │                                             │
+           │                                 1. Retriever (ChromaDB + nomic-embed-text)
+           │                                 2. Prompt Builder (Contexto estricto + Grounding)
+           │                                 3. LLM Ollama (gemma3:4b)
+           │                                 4. Evaluador de Escalamiento Humano
+           │                                             │
+           ◄── (SSE /api/live-chat/stream/:sessionId) ──┤
+           │                                             ▼
+           │                                  [Telegram Bot API]
+           │                                             │
+           ◄─── Respuesta en Vivo del Asesor ────────────┘
 ```
 
-- **Entry channel**: Modern conversational interface built with **React 19**, **Tailwind CSS v4** and **Vite** (located in `frontend/`), compiled to `frontend/dist/` and served by the Express backend on `http://localhost:3000`.
-- **RAG pipeline**: Business documents in `data/documents/` are chunked with overlap (`RecursiveCharacterTextSplitter`: 500 characters, 100 overlap), embedded with `nomic-embed-text` via Ollama, and stored in a local **Chroma** vector database (`hnsw:space: cosine`).
-- **Generation**: Uses local **Ollama** (`gemma3:4b`) directly via `backend/src/llm/ollamaClient.js`, with exact input/output token tracking.
-- **Escalation**: If retrieval finds no sufficiently relevant chunks (relevance threshold < 0.48), or the model detects sensitive complaints / out-of-scope requests, the response is flagged `escalated: true`.
-- **Automation**: `n8n/workflow.json` exposes a webhook that forwards incoming questions to the backend and branches on `escalated` to route the answer (optionally notifying a human advisor channel).
+---
 
-## Project Structure
+## 📁 Estructura del Proyecto
 
 ```
-backend/
-  src/
-    config/env.js         # Centralized environment variable loading
-    rag/ingest.js          # Loads docs, chunks (with overlap), embeds with Ollama, populates Chroma
-    rag/retriever.js       # Semantic search + relevance filtering (cosine distance)
-    llm/promptBuilder.js   # System prompt, brand personality, few-shot examples
-    llm/ollamaClient.js    # Ollama Chat API client (gemma3:4b) with token usage metrics
-    routes/query.js        # POST /api/query — main RAG endpoint
-    services/escalation.js # Decides when to hand off to a human advisor
-    server.js              # Express app entry point (serves API + frontend/dist)
-frontend/
-  src/
-    components/          # React UI components (Header, ChatMessage, ChatInput, SuggestedPrompts)
-    App.jsx              # Main conversational interface
-    index.css            # Tailwind CSS v4 styling (@import "tailwindcss";)
-    main.jsx             # React DOM root mounting
-  index.html             # Vite HTML entry point
-  vite.config.js         # Vite configuration with Tailwind CSS v4 & proxy
-data/documents/          # The academy's business documents (3 files)
-n8n/workflow.json        # Exported n8n automation workflow
+academia-idiomas-rag/
+├── backend/
+│   └── src/
+│       ├── config/env.js          # Variables de entorno
+│       ├── llm/
+│       │   ├── ollamaClient.js    # Cliente Ollama con métricas de tokens
+│       │   └── promptBuilder.js   # Prompt de sistema y personalidad de Lingua
+│       ├── rag/
+│       │   ├── ingest.js          # Ingesta, chunking y vectorización en ChromaDB
+│       │   └── retriever.js       # Búsqueda semántica con umbral de similitud coseno
+│       ├── routes/
+│       │   ├── liveChat.js        # Endpoints SSE, sondeo y comandos del chat en vivo
+│       │   └── query.js           # Endpoint principal POST /api/query
+│       ├── services/
+│       │   ├── escalation.js      # Detección de intención de asesor / ventas
+│       │   └── liveChat.js        # Orquestador Web-Telegram, polling y sesiones
+│       └── server.js              # Servidor Express y arranque del listener Telegram
+├── data/documents/                # Documentos Markdown oficiales de la academia
+│   ├── enrollment-and-certifications.md
+│   ├── pricing-and-levels.md
+│   └── schedules-and-modalities.md
+├── frontend/
+│   ├── src/
+│   │   ├── components/            # Navbar, Hero, ChatDrawer, ChatMessage, ChatInput, etc.
+│   │   ├── App.jsx                # Estado principal, conexión SSE y ciclo de chat
+│   │   ├── index.css              # Estilos Tailwind CSS v4
+│   │   └── main.jsx               # Montaje React
+│   ├── index.html                 # HTML principal
+│   └── vite.config.js             # Configuración Vite y proxy
+├── n8n/
+│   └── workflow.json              # Flujo exportado de n8n
+├── docker-compose.yml             # Contenedor de ChromaDB
+├── package.json                   # Scripts y dependencias
+└── .env.example                   # Plantilla de variables de entorno
 ```
 
-## Prerequisites
+---
 
-- Node.js 18+
-- Docker (to run the local Chroma vector database)
-- [Ollama](https://ollama.com/) with `gemma3:4b` and `nomic-embed-text` installed:
+## ⚙️ Requisitos Previos
+
+- **Node.js**: v18 o superior.
+- **Docker**: Para ejecutar la base de datos vectorial ChromaDB.
+- **Ollama**: Con los modelos instalados:
   ```bash
   ollama pull nomic-embed-text
   ollama pull gemma3:4b
   ```
 
-## Setup & Running
+---
 
-1. **Install dependencies**
-   ```bash
-   npm install
-   ```
+## 🛠️ Instalación y Puesta en Marcha
 
-2. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   ```
-   *(No OpenAI API key required; points to local Ollama on port 11434 by default)*
+### 1. Clonar e Instalar Dependencias
+```bash
+npm install
+```
 
-3. **Start the local vector database**
-   ```bash
-   docker compose up -d
-   ```
+### 2. Configurar Variables de Entorno
+Copia la plantilla y configura tus credenciales de Telegram:
+```bash
+cp .env.example .env
+```
 
-4. **Ingest the business documents into Chroma**
-   ```bash
-   npm run ingest
-   ```
-   Re-run this command any time a document in `data/documents/` changes — it cleanly refreshes the collection, ensuring no stale or duplicate data.
+Configura en tu `.env`:
+```env
+TELEGRAM_BOT_TOKEN=tu_token_de_bot_aqui
+TELEGRAM_ADVISOR_CHAT_ID=tu_chat_id_aqui
+```
 
-5. **Build the React Frontend (Production)**
-   ```bash
-   npm run build
-   ```
+### 3. Iniciar ChromaDB
+```bash
+docker compose up -d
+```
 
-6. **Start the Application**
-   ```bash
-   npm start
-   ```
-   The web application is available at `http://localhost:3000`, and the API at `http://localhost:3000/api/query`.
+### 4. Indexar Documentos en ChromaDB
+```bash
+npm run ingest
+```
+*(Ejecuta este comando cada vez que edites o agregues archivos en `data/documents/`).*
+
+### 5. Compilar el Frontend
+```bash
+npm run build
+```
+
+### 6. Iniciar la Aplicación
+```bash
+npm start
+```
+La aplicación web estará disponible en **`http://localhost:3000`**.
 
 ---
 
-### Development Mode (with Hot Module Replacement)
+## 📱 Flujo del Chat Bidireccional (Web ⟷ Telegram)
 
-You can run the backend and frontend separately during active development:
-- **Terminal 1 (Backend)**: `npm start` (Runs on `http://localhost:3000`)
-- **Terminal 2 (Frontend Dev Server)**: `npm run dev` (Runs on `http://localhost:5173` with automatic API proxying to `:3000`)
+1. **Solicitud de Asesor:**
+   El estudiante escribe en la web: *"Quiero inscribirme en el curso de inglés intensivo"*.
+2. **Captura de Contacto:**
+   - Lingua solicita su **nombre completo**: *"¿Cuál es tu nombre completo?"*.
+   - Luego solicita su **WhatsApp**: *"¿A qué número de WhatsApp podemos contactarte?"*.
+3. **Alerta en Telegram:**
+   El asesor recibe una ficha en Telegram con el Ticket, Nombre, Celular y Diagnóstico.
+4. **Respuesta en Vivo:**
+   El asesor responde en Telegram usando **Responder (Reply)**.
+   Su respuesta aparece de inmediato en la pantalla del estudiante con la insignia `👤 Asesor Humano • En Vivo`.
+5. **Finalización:**
+   El asesor escribe `/cerrar` en Telegram para dar por concluida la atención y regresar al estudiante al modo IA.
 
 ---
 
-## API
+## 📦 Paquetes de Distribución
 
-### `POST /api/query`
-
-**Request**
-```json
-{ "question": "¿Cuánto cuesta el nivel de inglés en modalidad Live Online?" }
-```
-
-**Response**
-```json
-{
-  "answer": "El nivel de inglés en modalidad Live Online cuesta COP 420,000.",
-  "escalated": false,
-  "sources": ["schedules-and-modalities.md", "pricing-and-levels.md"],
-  "usage": { "inputTokens": 1157, "outputTokens": 20 }
-}
-```
-
-When the question is out of scope or requires human attention (e.g. billing disputes, refund requests), `escalated` is `true` and `answer` contains the hand-off message.
-
-## n8n Automation & Telegram Advisor Channel
-
-1. Import `n8n/workflow.json` into your n8n instance.
-2. **Web Entry Channel**: The webhook node accepts student queries at `/webhook/linguabridge-query` and forwards them to the RAG backend.
-3. **Automated Classification**: Queries about schedules, pricing, and modalities are automatically answered.
-4. **Human Advisor & Sales Escalation**: When a student asks about human enrollment, sales assistance, payment disputes, or out-of-scope topics, `escalated` is flagged as `true`.
-5. **Instant Telegram Alert**: n8n sends an immediate alert to the human advisor's Telegram with the student's query, timestamp, and details so an advisor can follow up directly.
-
-## Prompt Engineering & Escalation
-
-- The system prompt (`backend/src/llm/promptBuilder.js`) defines the assistant's role ("Lingua"), brand personality, and strict restrictions (grounded exclusively in context, zero hallucination, polite escalation).
-- Three few-shot examples demonstrate: in-scope responses, out-of-scope language queries, and billing complaints that require human escalation.
-- Temperature is set to `0.2` by default (see `.env.example`) to maintain factual, consistent outputs.
-
-## Environment Variables
-
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Endpoint for the local Ollama instance |
-| `OLLAMA_CHAT_MODEL` | `gemma3:4b` | Ollama model used for text generation |
-| `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` | Ollama model used for document & query embeddings |
-| `PORT` | `3000` | HTTP port for the Express server |
-| `CHROMA_URL` | `http://localhost:8000` | ChromaDB vector database endpoint |
-| `CHROMA_COLLECTION_NAME` | `linguabridge_docs` | Name of the Chroma collection |
-| `CHUNK_SIZE` | `500` | Target character size for text splitter |
-| `CHUNK_OVERLAP` | `100` | Character overlap between consecutive chunks |
-| `RETRIEVAL_TOP_K` | `4` | Number of chunks retrieved per query |
-| `RELEVANCE_SCORE_THRESHOLD` | `0.48` | Cosine similarity threshold for relevance |
-| `LLM_TEMPERATURE` | `0.2` | Sampling temperature for LLM responses |
-
-
+El proyecto incluye archivos comprimidos listos para desplegar:
+- **`riwi-lingua-proyecto-completo.zip`**: Código fuente completo y optimizado (sin `node_modules`).
