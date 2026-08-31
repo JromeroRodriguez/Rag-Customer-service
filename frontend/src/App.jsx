@@ -12,7 +12,10 @@ import { Bot } from "lucide-react";
 export function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLiveAdvisorActive, setIsLiveAdvisorActive] = useState(false);
-  const [sessionId, setSessionId] = useState(() => "std_" + Math.random().toString(36).substring(2, 8));
+  const [sessionId, setSessionId] = useState(() => {
+    try { sessionStorage.clear(); } catch {}
+    return "std_" + Math.random().toString(36).substring(2, 8);
+  });
 
   const [messages, setMessages] = useState([
     {
@@ -99,7 +102,7 @@ export function App() {
     };
   }, [sessionId]);
 
-  const [studentName, setStudentName] = useState(() => sessionStorage.getItem("riwi_student_name") || "");
+  const [studentName, setStudentName] = useState("");
   const [pendingEscalation, setPendingEscalation] = useState(null);
 
   const handleEndLiveAdvisor = async () => {
@@ -134,7 +137,6 @@ export function App() {
     if (pendingEscalation) {
       const cleanName = questionText.trim();
       setStudentName(cleanName);
-      sessionStorage.setItem("riwi_student_name", cleanName);
 
       // Trigger Telegram alert with real student name
       fetch("/api/live-chat/escalate", {
