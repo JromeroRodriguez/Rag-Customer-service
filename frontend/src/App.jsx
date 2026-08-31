@@ -67,10 +67,27 @@ export function App() {
         }
       });
 
+      // Mejora 3: Handle /cerrar from advisor in Telegram
+      eventSource.addEventListener("live_ended", () => {
+        setIsLiveAdvisorActive(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `sys-${Date.now()}`,
+            role: "assistant",
+            content:
+              "El asesor humano ha finalizado la sesión en vivo. ¡Muchas gracias por comunicarte con nosotros! Has regresado al modo **Lingua Assistant (IA)**. ¿En qué más te puedo colaborar hoy?",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ]);
+      });
+
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.role === "human_advisor") {
+          if (data.type === "live_ended") {
+            setIsLiveAdvisorActive(false);
+          } else if (data.role === "human_advisor") {
             handleIncomingAdvisorMessage(data);
           }
         } catch {
@@ -103,6 +120,7 @@ export function App() {
   }, [sessionId]);
 
   const [studentName, setStudentName] = useState("");
+  const [studentPhone, setStudentPhone] = useState("");
   const [pendingEscalation, setPendingEscalation] = useState(null);
 
   const handleEndLiveAdvisor = async () => {
@@ -133,35 +151,58 @@ export function App() {
 
     setMessages((prev) => [...prev, userMsg]);
 
-    // If waiting for the student's name to connect with advisor
+    // Mejora 2: Captura en dos pasos (Nombre -> WhatsApp) antes de conectar al asesor
     if (pendingEscalation) {
-      const cleanName = questionText.trim();
-      setStudentName(cleanName);
+      const inputVal = questionText.trim();
 
-      // Trigger Telegram alert with real student name
-      fetch("/api/live-chat/escalate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId,
-          studentName: cleanName,
+      if (pendingEscalation.step === "name") {
+        setStudentName(inputVal);
+        setPendingEscalation({
+          step: "phone",
           question: pendingEscalation.question,
           answer: pendingEscalation.answer,
-        }),
-      }).catch(() => {});
+          studentName: inputVal,
+        });
 
-      setIsLiveAdvisorActive(true);
-      const escalationContext = pendingEscalation;
-      setPendingEscalation(null);
+        const askPhoneMsg = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: `¡Mucho gusto, **${inputVal}**! Por favor indícanos tu **número de WhatsApp o teléfono celular** para que el asesor pueda enviarte la cotización o contactarte si se interrumpe la conexión:`,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setMessages((prev) => [...prev, askPhoneMsg]);
+        return;
+      }
 
-      const confirmMsg = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: `¡Mucho gusto, **${cleanName}**! Le acabo de transferir tu consulta a nuestro asesor humano en Telegram.\n\nEn un momento te responderá directamente por aquí.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, confirmMsg]);
-      return;
+      if (pendingEscalation.step === "phone") {
+        setStudentPhone(inputVal);
+        const nameToUse = pendingEscalation.studentName || studentName || "Estudiante";
+
+        // Enviar alerta a Telegram con Nombre + WhatsApp completos
+        fetch("/api/live-chat/escalate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            studentName: nameToUse,
+            studentPhone: inputVal,
+            question: pendingEscalation.question,
+            answer: pendingEscalation.answer,
+          }),
+        }).catch(() => {});
+
+        setIsLiveAdvisorActive(true);
+        setPendingEscalation(null);
+
+        const confirmMsg = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: `¡Excelente, **${nameToUse}**! Tu solicitud ya fue enviada a nuestro asesor humano en Telegram con tu número de contacto (\`${inputVal}\`).\n\nEn un momento te responderá directamente por aquí en vivo.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setMessages((prev) => [...prev, confirmMsg]);
+        return;
+      }
     }
 
     // If already talking with a live human advisor, forward directly to Telegram (NO LLM)
@@ -170,7 +211,7 @@ export function App() {
         await fetch("/api/query", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: questionText, sessionId, studentName }),
+          body: JSON.stringify({ question: questionText, sessionId, studentName, studentPhone }),
         });
       } catch (err) {
         console.error("Error forwarding to advisor:", err);
@@ -195,7 +236,7 @@ export function App() {
 
       // If escalation requires the student's name, ask for it before alerting Telegram
       if (data.requiresName) {
-        setPendingEscalation({ question: questionText, answer: data.answer });
+        setPendingEscalation({ step: "name", question: questionText, answer: data.answer });
         const namePromptMsg = {
           id: (Date.now() + 1).toString(),
           role: "assistant",

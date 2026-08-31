@@ -1,6 +1,95 @@
 import React from "react";
 import { Bot, User, CheckCircle2, AlertCircle, FileText, Headphones, Sparkles } from "lucide-react";
 
+/**
+ * Format markdown text into React elements (Mejora 5)
+ */
+function renderFormattedMarkdown(text) {
+  if (!text) return null;
+
+  // Split into paragraphs by double newlines
+  const paragraphs = text.split(/\n\n+/);
+
+  return paragraphs.map((para, pIdx) => {
+    const lines = para.split("\n");
+
+    // Check if paragraph is a bullet list
+    const isList = lines.every((l) => /^\s*[-*•]\s+/.test(l.trim()));
+
+    if (isList) {
+      return (
+        <ul key={pIdx} className="space-y-1.5 my-2 pl-2">
+          {lines.map((line, lIdx) => {
+            const cleanLine = line.replace(/^\s*[-*•]\s+/, "");
+            return (
+              <li key={lIdx} className="flex items-start gap-2">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 mt-2 shrink-0"></span>
+                <span>{renderInlineStyles(cleanLine)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      );
+    }
+
+    return (
+      <p key={pIdx} className="mb-2 last:mb-0">
+        {lines.map((line, lIdx) => (
+          <React.Fragment key={lIdx}>
+            {renderInlineStyles(line)}
+            {lIdx < lines.length - 1 && <br />}
+          </React.Fragment>
+        ))}
+      </p>
+    );
+  });
+}
+
+/**
+ * Parses bold, backticks, and links
+ */
+function renderInlineStyles(text) {
+  if (!text) return null;
+
+  // Split by inline code, bold, or links
+  const regex = /(\*\*[^*]+\*\*|`[^`]+`|https?:\/\/[^\s]+)/g;
+  const parts = text.split(regex);
+
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={index} className="font-bold text-white">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code
+          key={index}
+          className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono text-xs border border-slate-700/60"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    if (part.startsWith("http://") || part.startsWith("https://")) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-cyan-400 hover:text-cyan-300 underline font-medium break-all"
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
 export function ChatMessage({ message }) {
   const isUser = message.role === "user";
   const isAdvisor = message.role === "human_advisor" || message.isHumanAdvisor;
@@ -82,9 +171,9 @@ export function ChatMessage({ message }) {
           </div>
         )}
 
-        {/* Message Text */}
-        <div className="text-sm sm:text-base leading-relaxed text-slate-200 whitespace-pre-wrap">
-          {message.content}
+        {/* Message Text with Markdown Rendering (Mejora 5) */}
+        <div className="text-sm sm:text-base leading-relaxed text-slate-200">
+          {renderFormattedMarkdown(message.content)}
         </div>
 
         {/* Metadata Footer */}

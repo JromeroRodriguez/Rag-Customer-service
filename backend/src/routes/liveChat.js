@@ -49,15 +49,15 @@ liveChatRouter.post("/send", (req, res) => {
   res.json({ success: true });
 });
 
-// Trigger escalation with student name
+// Trigger escalation with student name and phone/WhatsApp
 liveChatRouter.post("/escalate", async (req, res) => {
-  const { sessionId, studentName, question, answer } = req.body ?? {};
+  const { sessionId, studentName, studentPhone, question, answer } = req.body ?? {};
   if (!sessionId) {
     return res.status(400).json({ error: "Session ID is required." });
   }
 
-  const sent = await notifyAdvisorTelegram({ sessionId, studentName, question, answer });
-  res.json({ success: sent, studentName });
+  const sent = await notifyAdvisorTelegram({ sessionId, studentName, studentPhone, question, answer });
+  res.json({ success: sent, studentName, studentPhone });
 });
 
 // End live advisor mode and return to LLM

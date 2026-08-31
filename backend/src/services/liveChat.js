@@ -13,6 +13,10 @@ const sessionHistory = new Map();
 // Sessions currently in active Live Human Advisor mode (LLM bypassed)
 const activeLiveSessions = new Set();
 
+// Student metadata per session
+const studentNames = new Map();
+const studentPhones = new Map();
+
 let pollerRunning = false;
 let updateOffset = 0;
 
@@ -37,12 +41,13 @@ export function setLiveSession(sessionId, active = true) {
 }
 
 /**
- * Reset a session completely (clear history, advisor mode, and student name)
+ * Reset a session completely (clear history, advisor mode, and student metadata)
  */
 export function resetSession(sessionId) {
   sessionHistory.delete(sessionId);
   activeLiveSessions.delete(sessionId);
   studentNames.delete(sessionId);
+  studentPhones.delete(sessionId);
   console.log(`[liveChat] Session ${sessionId} completely reset.`);
 }
 
@@ -77,6 +82,33 @@ export function subscribeSession(sessionId, res) {
     clearInterval(heartbeat);
     activeClients.delete(sessionId);
     console.log(`[liveChat] Client disconnected from SSE session: ${sessionId} (Active: ${activeClients.size})`);
+
+    // Mejora 4: Detección de Desconexión del Estudiante en Vivo
+    if (isLiveSession(sessionId)) {
+      setTimeout(async () => {
+        // If client did not reconnect after 6s and still in live session
+        if (!activeClients.has(sessionId) && isLiveSession(sessionId)) {
+          const studentName = studentNames.get(sessionId) || "El estudiante";
+          const studentPhone = studentPhones.get(sessionId);
+          const phoneLine = studentPhone ? `\n📱 *WhatsApp del estudiante:* \`${studentPhone}\`` : "";
+
+          const token = process.env.TELEGRAM_BOT_TOKEN;
+          const chatId = process.env.TELEGRAM_ADVISOR_CHAT_ID;
+
+          if (token && chatId) {
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: chatId,
+                text: `📴 *${studentName} (#${sessionId}) cerró la página web o se desconectó.*${phoneLine}`,
+                parse_mode: "Markdown",
+              }),
+            }).catch(() => {});
+          }
+        }
+      }, 6000);
+    }
   });
 }
 
@@ -125,13 +157,10 @@ export function sendAdvisorMessage(sessionId, text) {
   return true;
 }
 
-// Store student names per session
-const studentNames = new Map();
-
 /**
- * Send an escalation lead to the Advisor's Telegram
+ * Send an escalation lead to the Advisor's Telegram with Name and Phone/WhatsApp (Mejora 2)
  */
-export async function notifyAdvisorTelegram({ sessionId, studentName, question, answer }) {
+export async function notifyAdvisorTelegram({ sessionId, studentName, studentPhone, question, answer }) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_ADVISOR_CHAT_ID;
 
@@ -140,12 +169,12 @@ export async function notifyAdvisorTelegram({ sessionId, studentName, question, 
     return false;
   }
 
-  // Save student name if provided
-  if (studentName) {
-    studentNames.set(sessionId, studentName.trim());
-  }
+  // Save student metadata
+  if (studentName) studentNames.set(sessionId, studentName.trim());
+  if (studentPhone) studentPhones.set(sessionId, studentPhone.trim());
 
   const nameDisplay = studentNames.get(sessionId) || studentName || "Estudiante por confirmar";
+  const phoneDisplay = studentPhones.get(sessionId) || studentPhone || "No proporcionado";
 
   // Mark session as live
   setLiveSession(sessionId, true);
@@ -153,6 +182,7 @@ export async function notifyAdvisorTelegram({ sessionId, studentName, question, 
   const messageText = `🚨 *NUEVA ATENCIÓN HUMANA REQUERIDA*
 🎫 *Ticket:* \`#${sessionId}\`
 👤 *Estudiante:* *${nameDisplay}*
+📱 *WhatsApp / Tel:* \`${phoneDisplay}\`
 
 📝 *Pregunta del Estudiante:*
 ${question}
@@ -160,7 +190,8 @@ ${question}
 💡 *Diagnóstico de Lingua:*
 ${answer}
 
-👉 *Para responderle a ${nameDisplay}:* Dale a *Responder (Reply)* a este mensaje con tu respuesta (o escribe: \`#${sessionId} Tu mensaje\`).`;
+👉 *Para responderle a ${nameDisplay}:* Dale a *Responder (Reply)* a este mensaje con tu respuesta.
+🛑 *Para finalizar la sesión:* Escribe \`/cerrar\` o \`/fin\`.`;
 
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -176,7 +207,7 @@ ${answer}
     const data = await res.json();
     if (data.ok && data.result?.message_id) {
       ticketMap.set(data.result.message_id.toString(), sessionId);
-      console.log(`[liveChat] Telegram escalation sent for ${nameDisplay}. Message ID: ${data.result.message_id}`);
+      console.log(`[liveChat] Telegram escalation sent for ${nameDisplay} (${phoneDisplay}). Message ID: ${data.result.message_id}`);
       return true;
     }
   } catch (err) {
@@ -200,7 +231,8 @@ export async function forwardStudentMessageToAdvisor(sessionId, text) {
 
 "${text}"
 
-👉 *Para responderle:* Dale a *Responder (Reply)* a este mensaje.`;
+👉 *Para responderle:* Dale a *Responder (Reply)* a este mensaje.
+🛑 *Para finalizar:* Escribe \`/cerrar\`.`;
 
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -296,8 +328,44 @@ export function startTelegramListener() {
               }
             }
 
+            // Mejora 3: Comando /cerrar o /fin desde Telegram
+            const cleanText = msg.text.trim().toLowerCase();
+            if (cleanText === "/cerrar" || cleanText === "/fin" || cleanText === "/end") {
+              if (targetSessionId) {
+                setLiveSession(targetSessionId, false);
+                const clientRes = activeClients.get(targetSessionId);
+                if (clientRes) {
+                  clientRes.write(
+                    `event: live_ended\ndata: ${JSON.stringify({
+                      type: "live_ended",
+                      message: "El asesor humano ha finalizado la sesión en vivo.",
+                    })}\n\n`
+                  );
+                }
+                const nameDisplay = studentNames.get(targetSessionId) || "el estudiante";
+                await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    chat_id: msg.chat.id,
+                    text: `🛑 *Has finalizado la atención en vivo con ${nameDisplay}.*\nEl estudiante ha regresado al Asistente Lingua (IA).`,
+                    reply_to_message_id: msg.message_id,
+                    parse_mode: "Markdown",
+                  }),
+                }).catch(() => {});
+              }
+              continue;
+            }
+
             if (targetSessionId) {
               sendAdvisorMessage(targetSessionId, msg.text);
+
+              // Also deliver to any currently connected web client just in case
+              for (const [sessId] of activeClients) {
+                if (sessId !== targetSessionId) {
+                  sendAdvisorMessage(sessId, msg.text);
+                }
+              }
 
               // Confirmation back to Telegram
               await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
