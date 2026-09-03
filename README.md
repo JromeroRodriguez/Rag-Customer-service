@@ -1,161 +1,250 @@
-# LinguaBridge RAG Assistant
+# Riwi LinguaBridge — Asistente RAG de Alta Velocidad y Chat Bidireccional
 
-An intelligent customer support assistant for **LinguaBridge Academy** (a fictional Colombian language academy), built for RIWI's Module 5.7 — AI Automatizador performance test.
+Asistente virtual inteligente de atención al cliente para **Riwi LinguaBridge** (academia de idiomas en Barranquilla), diseñado para orientar a estudiantes sobre cursos de **Inglés, Francés y Portugués**, modalidades (**Presencial**, **Live Online** y **Self-Paced**), precios, horarios, certificaciones y matrículas.
 
-The assistant answers questions about schedules, pricing, levels, enrollment, and certifications **using only the academy's own business documents**, and escalates to a human advisor whenever a question falls outside what those documents cover.
+Cuenta con un motor de inferencia de ultra-alta velocidad impulsado por **Groq LPU** (`openai/gpt-oss-120b` de **120 mil millones de parámetros**), con **arquitectura de resiliencia en cascada de 3 niveles** (Groq $\rightarrow$ OpenRouter $\rightarrow$ Ollama local `gemma3:4b` con ventana de 4K tokens), almacenamiento vectorial sobre **PostgreSQL 16 + `pgvector`** con **Búsqueda Híbrida (Vectorial + Full-Text Search)** e inspección visual en **DBeaver**, y un canal de **Chat Bidireccional en Vivo con Telegram** para atención humana en tiempo real.
 
-This version runs **100% locally and offline with $0 API costs** using **Ollama** (`gemma3:4b` + `nomic-embed-text`) and **ChromaDB**.
 
-## Architecture
+---
+
+## Características Principales
+
+- **Motor LLM de 120B Parámetros en Groq LPU (Ultra-Alta Velocidad)**:
+  - Inferencia sobre hardware especializado Groq LPU con el modelo **`openai/gpt-oss-120b`**, logrando respuestas completas con tablas y cálculos en **menos de 3 segundos**.
+  - **Mecanismo de Resiliencia en Cascada (3 Niveles)**:
+    1. **Nivel 1 (Primario):** Groq LPU (`openai/gpt-oss-120b`).
+    2. **Nivel 2 (Secundario):** OpenRouter Cloud (`liquid/lfm-2.5-2.6b:free`).
+    3. **Nivel 3 (Offline Fail-Safe):** Ollama Local (`gemma3:4b` con `num_ctx: 4096`), garantizando 100% de disponibilidad.
+
+- **Base de Datos Vectorial PostgreSQL 16 (`pgvector`) + Visualización en DBeaver**:
+  - Almacenamiento en tabla única `document_chunks` con índice **HNSW** para distancia de coseno y **GIN** para texto completo.
+  - Conexión y gestión visual directa desde clientes como **DBeaver** o TablePlus (`localhost:5433`).
+
+- **Búsqueda Híbrida (Hybrid Search: 70% Semántica + 30% Léxica)**:
+  - Combina la comprensión contextual del vector embedding con la precisión milimétrica de palabras clave exactas (`tsvector` / `tsquery`).
+- **Temperatura Cero ($T = 0$) para Máxima Factualidad**:
+  - Inferencia determinista que previene alucinaciones, garantizando que precios, fechas y políticas coincidan con los documentos oficiales.
+- **Embeddings de Última Generación (`nomic-embed-text-v2-moe`)**:
+  - Arquitectura *Mixture of Experts* (MoE) en 768 dimensiones con alta riqueza semántica multilingüe para español, inglés, francés y portugués.
+- **Chunking Semántico Atómico por Secciones (Heading-Aware)**:
+  - Particionado guiado por encabezados Markdown (`#` y `##`) que preserva la integridad de listas atómicas (precios por modalidad, pasos de matrícula del 1 al 5, horarios y sedes) sin cortes arbitrarios por longitud de caracteres.
+- **Streaming en Tiempo Real (Token-by-Token SSE)**:
+  - Transmisión palabra por palabra mediante Server-Sent Events (`text/event-stream`), entregando el primer token en pantalla en poco más de 1 segundo.
+- **Chat Bidireccional Web - Telegram con Asesores Humanos**:
+  - Botón explícito **`[ Hablar con Asesor ]`** en la cabecera del chat para desacoplar el escalamiento de las consultas de RAG.
+  - Captura conversacional en dos pasos de **Nombre completo** y **WhatsApp (estándar de 10 dígitos de Colombia)**.
+  - El asesor recibe un ticket interactivo en Telegram y puede responder directamente con **Responder (Reply)**.
+  - La respuesta humana entra en vivo en la pantalla del usuario en menos de 1 segundo.
+- **Nuevo Diseño Corporativo RIWI LinguaBridge**:
+  - Construido con **React 19**, **Tailwind CSS v4**, **Vite** e íconos **Lucide**.
+
+---
+
+## Arquitectura del Sistema
+
 
 ```
-[Web Form] --POST /api/query--> [Express Backend]
-                                       |
-                          1. Retriever (Chroma + Ollama nomic-embed-text)
-                          2. Prompt Builder (system prompt + few-shots + context)
-                          3. Ollama Chat API (gemma3:4b generation)
-                          4. Escalation check
-                                       |
-                                  JSON response
-                                       |
-                         [n8n workflow can call the same endpoint]
+ [Navegador del Estudiante]
+           │
+           ├── (POST /api/query) ──────────────► [Backend Express]
+           │                                             │
+           │                     1. Contextualizador Multi-Turno
+           │                     2. Búsqueda Híbrida (PostgreSQL pgvector + FTS)
+           │                     3. Prompt Grounding Estricto (T = 0)
+           │                     4. Inferencia en Cascada Resiliente:
+           │                        ↳ Primario: Groq LPU (openai/gpt-oss-120b - 120B)
+           │                        ↳ Secundario: OpenRouter (liquid/lfm-2.5-2.6b:free)
+           │                        ↳ Fallback Local: Ollama (gemma3:4b con 4K context)
+           │                     5. Evaluador de Escalamiento Humano
+           │                                             │
+           ◄── (SSE /api/live-chat/stream/:sessionId) ──┤
+           │                                             ▼
+           │                                  [Telegram Bot API]
+           │                                             │
+           ◄─── Respuesta en Vivo del Asesor ────────────┘
 ```
 
-- **Entry channel**: Modern conversational interface built with **React 19**, **Tailwind CSS v4** and **Vite** (located in `frontend/`), compiled to `frontend/dist/` and served by the Express backend on `http://localhost:3000`.
-- **RAG pipeline**: Business documents in `data/documents/` are chunked with overlap (`RecursiveCharacterTextSplitter`: 500 characters, 100 overlap), embedded with `nomic-embed-text` via Ollama, and stored in a local **Chroma** vector database (`hnsw:space: cosine`).
-- **Generation**: Uses local **Ollama** (`gemma3:4b`) directly via `backend/src/llm/ollamaClient.js`, with exact input/output token tracking.
-- **Escalation**: If retrieval finds no sufficiently relevant chunks (relevance threshold < 0.48), or the model detects sensitive complaints / out-of-scope requests, the response is flagged `escalated: true`.
-- **Automation**: `n8n/workflow.json` exposes a webhook that forwards incoming questions to the backend and branches on `escalated` to route the answer (optionally notifying a human advisor channel).
+---
 
-## Project Structure
+## Estructura del Proyecto
+
 
 ```
-backend/
-  src/
-    config/env.js         # Centralized environment variable loading
-    rag/ingest.js          # Loads docs, chunks (with overlap), embeds with Ollama, populates Chroma
-    rag/retriever.js       # Semantic search + relevance filtering (cosine distance)
-    llm/promptBuilder.js   # System prompt, brand personality, few-shot examples
-    llm/ollamaClient.js    # Ollama Chat API client (gemma3:4b) with token usage metrics
-    routes/query.js        # POST /api/query — main RAG endpoint
-    services/escalation.js # Decides when to hand off to a human advisor
-    server.js              # Express app entry point (serves API + frontend/dist)
-frontend/
-  src/
-    components/          # React UI components (Header, ChatMessage, ChatInput, SuggestedPrompts)
-    App.jsx              # Main conversational interface
-    index.css            # Tailwind CSS v4 styling (@import "tailwindcss";)
-    main.jsx             # React DOM root mounting
-  index.html             # Vite HTML entry point
-  vite.config.js         # Vite configuration with Tailwind CSS v4 & proxy
-data/documents/          # The academy's business documents (3 files)
-n8n/workflow.json        # Exported n8n automation workflow
+Rag-Customer-service/
+├── backend/
+│   └── src/
+│       ├── config/env.js          # Variables de entorno y umbrales calibrados
+│       ├── db/
+│       │   └── pgvector.js        # Pool PostgreSQL, esquema, HNSW/GIN y Búsqueda Híbrida
+│       ├── llm/
+│       │   ├── groqClient.js      # Cliente Groq LPU (chat completions & SSE stream con 120B)
+│       │   ├── llmClient.js       # Orquestador híbrido en cascada Groq + OpenRouter + Ollama
+│       │   ├── openrouterClient.js# Cliente OpenRouter (chat completions & SSE stream)
+│       │   ├── ollamaClient.js    # Cliente Ollama local (gemma3:4b con num_ctx: 4096)
+│       │   └── promptBuilder.js   # Prompt del sistema, restricciones y ejemplos few-shot
+│       ├── rag/
+│       │   ├── ingest.js          # Chunking semántico atómico e indexación en PostgreSQL
+│       │   └── retriever.js       # Búsqueda híbrida (vector + texto) balanceada multi-documento
+│       ├── routes/
+│       │   ├── liveChat.js        # Endpoints de chat en vivo con Telegram
+│       │   └── query.js           # Endpoint principal POST /api/query
+│       ├── services/
+│       │   ├── escalation.js      # Reglas de escalamiento a asesor humano
+│       │   ├── liveChat.js        # Polling y reenvío bidireccional Web-Telegram
+│       │   ├── scopeGuard.js      # Filtro de temas fuera de alcance
+│       │   └── validation.js      # Validación de nombres y WhatsApp (estándar Colombia 10 dígitos)
+│       └── server.js              # Servidor Express y arranque de servicios
+├── data/documents/                # Documentos oficiales de la academia (Markdown)
+│   ├── enrollment-and-certifications.md
+│   ├── pricing-and-levels.md
+│   └── schedules-and-modalities.md
+├── frontend/
+│   ├── src/
+│   │   ├── components/            # Navbar, Hero, ChatDrawer, ChatMessage, PricingSection, etc.
+│   │   ├── lib/
+│   │   │   ├── riwi-data.js       # Constantes y formateo oficial
+│   │   │   └── validation.js      # Validaciones en cliente
+│   │   ├── App.jsx                # Estado global, lector de SSE y drawer de chat
+│   │   ├── index.css              # Tokens de diseño Tailwind v4 y tipografías
+│   │   └── main.jsx               # Montaje React
+│   ├── index.html                 # Fuentes Google Fonts (Sora & Manrope)
+│   └── vite.config.js             # Configuración Vite
+├── docker-compose.yml             # Contenedor de PostgreSQL 16 con pgvector (puerto 5433)
+├── package.json                   # Scripts y dependencias del proyecto
+├── .env.example                   # Plantilla de variables de entorno
+└── .env                           # Configuración activa del entorno
 ```
 
-## Prerequisites
+---
 
-- Node.js 18+
-- Docker (to run the local Chroma vector database)
-- [Ollama](https://ollama.com/) with `gemma3:4b` and `nomic-embed-text` installed:
+## Requisitos Previos
+
+- **Node.js**: v18 o superior.
+- **Docker**: Para ejecutar la base de datos vectorial PostgreSQL 16 con `pgvector`.
+- **Ollama**: Con los modelos descargados para embeddings y respaldo local:
   ```bash
-  ollama pull nomic-embed-text
+  ollama pull nomic-embed-text-v2-moe:latest
   ollama pull gemma3:4b
   ```
+- **API Key de Groq**: Para inferencia en la nube de ultra-alta velocidad en hardware LPU (`openai/gpt-oss-120b` de 120B).
+- **API Key de OpenRouter (Opcional)**: Como segundo nivel de respaldo en la nube.
+- **Bot de Telegram (Opcional pero recomendado)**: Para el canal de chat con asesores en vivo.
 
-## Setup & Running
+---
+## Instalación y Puesta en Marcha
 
-1. **Install dependencies**
-   ```bash
-   npm install
-   ```
+### 1. Clonar e Instalar Dependencias
 
-2. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   ```
-   *(No OpenAI API key required; points to local Ollama on port 11434 by default)*
+```bash
+npm install
+```
 
-3. **Start the local vector database**
-   ```bash
-   docker compose up -d
-   ```
+### 2. Configurar Variables de Entorno
+Copia la plantilla `.env.example` a `.env` y define tus credenciales:
+```bash
+cp .env.example .env
+```
 
-4. **Ingest the business documents into Chroma**
-   ```bash
-   npm run ingest
-   ```
-   Re-run this command any time a document in `data/documents/` changes — it cleanly refreshes the collection, ensuring no stale or duplicate data.
+Contenido representativo de `.env`:
+```env
+# Servidor
+PORT=3000
 
-5. **Build the React Frontend (Production)**
-   ```bash
-   npm run build
-   ```
+# Groq (Inferencia Primaria Ultra-rápida LPU - Modelo 120B)
+GROQ_API_KEY=gsk_...
+GROQ_MODEL=openai/gpt-oss-120b
+GROQ_BASE_URL=https://api.groq.com/openai/v1
 
-6. **Start the Application**
-   ```bash
-   npm start
-   ```
-   The web application is available at `http://localhost:3000`, and the API at `http://localhost:3000/api/query`.
+# OpenRouter (Inferencia Cloud Secundaria)
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_MODEL=liquid/lfm-2.5-2.6b:free
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
+
+# Ollama Local (Fallback)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_CHAT_MODEL=gemma3:4b
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text-v2-moe:latest
+
+# PostgreSQL + pgvector (Base de Datos Vectorial)
+PG_HOST=localhost
+PG_PORT=5433
+PG_DATABASE=linguabridge
+PG_USER=postgres
+PG_PASSWORD=postgres
+
+# Parámetros RAG
+CHUNK_SIZE=500
+CHUNK_OVERLAP=100
+RETRIEVAL_TOP_K=6
+RELEVANCE_SCORE_THRESHOLD=0.25
+LLM_TEMPERATURE=0
+
+# Chat en Vivo con Telegram
+TELEGRAM_BOT_TOKEN=tu_token_aqui
+TELEGRAM_ADVISOR_CHAT_ID=tu_chat_id_aqui
+```
+
+### 3. Iniciar PostgreSQL + pgvector con Docker
+Inicia el contenedor en segundo plano:
+```bash
+docker compose up -d
+```
+> El contenedor `linguabridge-pgvector` estará disponible en el puerto `5433`.
+
+### 4. Indexar Documentos
+Crea la extensión `vector`, la tabla `document_chunks`, los índices HNSW y GIN, y vectoriza los 15 chunks semánticos atómicos:
+```bash
+npm run ingest
+```
+
+### 5. Compilar el Frontend
+```bash
+npm run build
+```
+
+### 6. Iniciar el Servidor
+```bash
+npm start
+```
+
+La aplicación web estará disponible en **`http://localhost:3000`**.
 
 ---
 
-### Development Mode (with Hot Module Replacement)
+## Inspección Visual de la Base de Datos con DBeaver
 
-You can run the backend and frontend separately during active development:
-- **Terminal 1 (Backend)**: `npm start` (Runs on `http://localhost:3000`)
-- **Terminal 2 (Frontend Dev Server)**: `npm run dev` (Runs on `http://localhost:5173` with automatic API proxying to `:3000`)
+Puedes ver los documentos, textos, metadatos y vectores directamente en **DBeaver**:
+
+1. Abre **DBeaver** y crea una **Nueva Conexión** $\rightarrow$ selecciona **PostgreSQL**.
+2. Parámetros de conexión:
+   - **Host:** `localhost` (o `127.0.0.1`)
+   - **Port:** `5433` (puerto **5433**, no el estándar 5432)
+   - **Database:** `linguabridge`
+   - **Username:** `postgres`
+   - **Password:** `postgres`
+3. Haz clic en **Test Connection ...** y luego en **Finish**.
+4. En el panel izquierdo navega a:  
+   `linguabridge` $\rightarrow$ `Databases` $\rightarrow$ `linguabridge` $\rightarrow$ `Schemas` $\rightarrow$ `public` $\rightarrow$ `Tables` $\rightarrow$ **`document_chunks`**.
+5. Haz doble clic sobre **`document_chunks`** y selecciona la pestaña **Data** para explorar los 15 registros.
 
 ---
 
-## API
+## Flujo del Chat Bidireccional (Web - Telegram)
 
-### `POST /api/query`
+1. **Solicitud de Asesor:**
+   El estudiante puede hacer clic en el botón **`[ Hablar con Asesor ]`** en la cabecera del chat, o indicar una necesidad comercial o reclamo.
+2. **Captura Conversacional con Validación Estricta:**
+   - **Nombre completo:** Mínimo 2 palabras, solo letras (sin números ni caracteres especiales).
+   - **WhatsApp:** Estándar de Colombia de **10 dígitos** numéricos (iniciando en 3, ej. `300 123 4567`).
+3. **Alerta Instantánea en Telegram:**
+   El asesor humano recibe una tarjeta interactiva en Telegram con el Ticket (`#std_xxxx`), Nombre, WhatsApp formateado a `+57`, Pregunta del Estudiante y Resumen del Asistente.
+4. **Respuesta en Tiempo Real:**
+   El asesor presiona **Responder (Reply)** en Telegram sobre el ticket. Su mensaje aparece de inmediato en la pantalla del estudiante con la insignia verde de `Asesor Humano - En Vivo`.
+5. **Silenciado de IA:**
+   Mientras el asesor y el estudiante conversan, el LLM no interfiere.
+6. **Comando de Cierre (`/cerrar`):**
+   El asesor escribe `/cerrar` o `/fin` en Telegram para dar por concluida la atención y devolver al estudiante al Asistente Lingua (IA).
 
-**Request**
-```json
-{ "question": "¿Cuánto cuesta el nivel de inglés en modalidad Live Online?" }
-```
-
-**Response**
-```json
-{
-  "answer": "El nivel de inglés en modalidad Live Online cuesta COP 420,000.",
-  "escalated": false,
-  "sources": ["schedules-and-modalities.md", "pricing-and-levels.md"],
-  "usage": { "inputTokens": 1157, "outputTokens": 20 }
-}
-```
-
-When the question is out of scope or requires human attention (e.g. billing disputes, refund requests), `escalated` is `true` and `answer` contains the hand-off message.
-
-## n8n Automation & Telegram Advisor Channel
-
-1. Import `n8n/workflow.json` into your n8n instance.
-2. **Web Entry Channel**: The webhook node accepts student queries at `/webhook/linguabridge-query` and forwards them to the RAG backend.
-3. **Automated Classification**: Queries about schedules, pricing, and modalities are automatically answered.
-4. **Human Advisor & Sales Escalation**: When a student asks about human enrollment, sales assistance, payment disputes, or out-of-scope topics, `escalated` is flagged as `true`.
-5. **Instant Telegram Alert**: n8n sends an immediate alert to the human advisor's Telegram with the student's query, timestamp, and details so an advisor can follow up directly.
-
-## Prompt Engineering & Escalation
-
-- The system prompt (`backend/src/llm/promptBuilder.js`) defines the assistant's role ("Lingua"), brand personality, and strict restrictions (grounded exclusively in context, zero hallucination, polite escalation).
-- Three few-shot examples demonstrate: in-scope responses, out-of-scope language queries, and billing complaints that require human escalation.
-- Temperature is set to `0.2` by default (see `.env.example`) to maintain factual, consistent outputs.
-
-## Environment Variables
-
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Endpoint for the local Ollama instance |
-| `OLLAMA_CHAT_MODEL` | `gemma3:4b` | Ollama model used for text generation |
-| `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` | Ollama model used for document & query embeddings |
-| `PORT` | `3000` | HTTP port for the Express server |
-| `CHROMA_URL` | `http://localhost:8000` | ChromaDB vector database endpoint |
-| `CHROMA_COLLECTION_NAME` | `linguabridge_docs` | Name of the Chroma collection |
-| `CHUNK_SIZE` | `500` | Target character size for text splitter |
-| `CHUNK_OVERLAP` | `100` | Character overlap between consecutive chunks |
-| `RETRIEVAL_TOP_K` | `4` | Number of chunks retrieved per query |
-| `RELEVANCE_SCORE_THRESHOLD` | `0.48` | Cosine similarity threshold for relevance |
-| `LLM_TEMPERATURE` | `0.2` | Sampling temperature for LLM responses |
 
 

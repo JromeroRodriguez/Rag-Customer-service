@@ -1,0 +1,38 @@
+{
+  "name": "linguabridge-rag-assistant",
+  "version": "1.0.0",
+  "description": "Intelligent customer support assistant with RAG for a language academy (RIWI Module 5.7 performance test)",
+  "type": "module",
+  "main": "backend/src/server.js",
+  "scripts": {
+    "dev": "vite frontend",
+    "build": "vite build frontend",
+    "preview": "vite preview frontend",
+    "start": "node backend/src/server.js",
+    "watch": "node --watch backend/src/server.js",
+    "ingest": "node backend/src/rag/ingest.js"
+  },
+  "dependencies": {
+    "@langchain/community": "^0.3.9",
+    "@langchain/core": "^0.3.26",
+    "@langchain/textsplitters": "^0.1.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "cors": "^2.8.5",
+    "dompurify": "^3.4.14",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "lucide-react": "^1.38.0",
+    "marked": "^18.0.11",
+    "pg": "^8.23.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.3.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.2.2"
+  }
+}

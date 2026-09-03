@@ -1,0 +1,156 @@
+{
+  "name": "Riwi Lingua - RAG Assistant & Human Advisor Telegram Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "linguabridge-query",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "name": "Webhook - Incoming Question",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "linguabridge-query"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/query",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"question\": $json.body.question } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "2b2b2b2b-0000-4000-8000-000000000002",
+      "name": "Call RAG Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "3c3c3c3c-0000-4000-8000-000000000003",
+              "leftValue": "={{$json.escalated}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "name": "Needs Human Advisor / Sales Escalation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "6903804752",
+        "text": "=🚨 *NUEVO LEAD / ATENCIÓN HUMANA REQUERIDA*\n\n📝 *Pregunta del Estudiante:*\n{{ $('Webhook - Incoming Question').item.json.body.question }}\n\n🏢 *Área:* Admisiones & Ventas Riwi Lingua\n⏰ *Fecha y Hora:* {{ $now.format('yyyy-MM-dd HH:mm:ss') }}",
+        "additionalFields": {
+
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "7a7a7a7a-0000-4000-8000-000000000007",
+      "name": "Notify Advisor (Telegram Alert)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [960, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"answer\": $json.answer, \"escalated\": true, \"advisor_notified\": true, \"channel\": \"human-advisor-telegram-alert\" } }}",
+        "options": {}
+      },
+      "id": "5e5e5e5e-0000-4000-8000-000000000005",
+      "name": "Respond - Escalated to Advisor",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1180, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"answer\": $json.answer, \"escalated\": false, \"advisor_notified\": false } }}",
+        "options": {}
+      },
+      "id": "6f6f6f6f-0000-4000-8000-000000000006",
+      "name": "Respond - Answered by Lingua",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 400]
+    }
+  ],
+  "connections": {
+    "Webhook - Incoming Question": {
+      "main": [
+        [
+          {
+            "node": "Call RAG Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call RAG Backend": {
+      "main": [
+        [
+          {
+            "node": "Needs Human Advisor / Sales Escalation?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Human Advisor / Sales Escalation?": {
+      "main": [
+        [
+          {
+            "node": "Notify Advisor (Telegram Alert)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond - Escalated to Advisor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Answered by Lingua",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "riwi-lingua-advisor-alerts"
+  }
+}
