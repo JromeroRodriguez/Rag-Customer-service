@@ -1,119 +1,96 @@
 import React from "react";
-import { CheckCircle, Award, Calendar, AlertCircle, ArrowRight, Sparkles, MessageSquare } from "lucide-react";
-
-const STEPS = [
-  {
-    step: "01",
-    title: "Test de Clasificación",
-    description: "Toma el test gratuito de 20 minutos (online o presencial). Principiantes absolutos inician directo.",
-  },
-  {
-    step: "02",
-    title: "Elige Modalidad & Horario",
-    description: "Selecciona entre Presencial en Barranquilla, Live Online por Zoom o Self-Paced 24/7.",
-  },
-  {
-    step: "03",
-    title: "Registro de Admisión",
-    description: "Completa el formulario en línea o en recepción en la Calle 45 #22-18.",
-  },
-  {
-    step: "04",
-    title: "Pago de Matrícula",
-    description: "Asegura tu cupo antes del cierre de inscripciones por transferencia, tarjeta o efectivo.",
-  },
-  {
-    step: "05",
-    title: "Inicio de Cohorte",
-    description: "Recibe accesos y bienvenida. ¡Iniciamos clases el primer lunes de cada mes!",
-  },
-];
+import { CheckCircle, Award, Calendar, AlertCircle, ArrowRight } from "lucide-react";
+import { ENROLLMENT_STEPS } from "../lib/riwi-data.js";
 
 export function EnrollmentSteps({ onAskQuestion }) {
   return (
-    <section id="matricula" className="py-16 sm:py-24 border-b border-slate-800/60 bg-slate-900/40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-12">
-        {/* Section Header */}
+    <section id="matricula" className="py-16 sm:py-24 border-b border-border bg-secondary/50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-14">
         <div className="text-center max-w-3xl mx-auto space-y-3">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-semibold">
+          <div className="section-eyebrow">
             <Calendar className="w-3.5 h-3.5" />
-            Admisiones y Certificaciones
+            Admisiones & Certificaciones
           </div>
-          <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-            Paso a Paso para Comenzar tus Clases
+          <h2 className="text-2xl sm:text-4xl font-extrabold text-navy tracking-tight font-display">
+            ¿Cómo es el Proceso de Matrícula?
           </h2>
-          <p className="text-sm sm:text-base text-slate-400">
-            Nuevas cohortes inician cada mes. Pregunta a <strong>Lingua</strong> sobre fechas de cierre, requisitos y certificado final.
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Nuevas cohortes inician el <strong className="text-foreground">primer lunes de cada mes</strong>. Las inscripciones cierran el jueves anterior a la fecha de inicio.
           </p>
         </div>
 
-        {/* Steps Grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {STEPS.map((s, idx) => (
+          {ENROLLMENT_STEPS.map((s) => (
             <div
-              key={idx}
-              className="p-5 rounded-2xl bg-slate-950/90 border border-slate-800 hover:border-slate-700 transition-all space-y-3 relative flex flex-col justify-between"
+              key={s.step}
+              className="p-5 rounded-2xl bg-card border border-border hover:shadow-md transition-shadow space-y-2"
             >
-              <div className="space-y-2">
-                <span className="text-2xl font-black bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-                  {s.step}
-                </span>
-                <h3 className="font-bold text-sm text-slate-100">{s.title}</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">{s.description}</p>
-              </div>
+              <span className="text-2xl font-black text-primary font-display">{s.step}</span>
+              <h3 className="font-bold text-sm text-foreground font-display">{s.title}</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{s.description}</p>
             </div>
           ))}
         </div>
 
-        {/* Interactive Query Cards */}
         <div className="grid md:grid-cols-2 gap-6">
-          <div className="p-6 sm:p-7 rounded-3xl bg-slate-950 border border-slate-800 space-y-4 flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                  <Award className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-base text-slate-100">Certificación Oficial</h4>
-                  <p className="text-xs text-slate-400">Expedición digital con código único verificable</p>
-                </div>
+          <div className="p-6 sm:p-8 rounded-2xl bg-card border border-border space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-accent border border-border flex items-center justify-center text-primary">
+                <Award className="w-5 h-5" />
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Al cumplir con los criterios de asistencia y evaluación, recibirás tu certificación oficial de nivel según el marco CEFR.
-              </p>
+              <div>
+                <h4 className="font-bold text-base text-foreground font-display">Certificación Oficial de Nivel</h4>
+                <p className="text-xs text-muted-foreground">Emisión digital automática e institucional</p>
+              </div>
             </div>
-
-            <button
-              onClick={() => onAskQuestion("¿Cuáles son los requisitos exactos de asistencia y nota para obtener el certificado?")}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-850 text-slate-200 hover:text-white border border-slate-800 text-xs font-semibold transition-colors cursor-pointer"
-            >
-              <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Consultar Requisitos de Certificación</span>
-            </button>
+            <p className="text-xs text-foreground/80 leading-relaxed">
+              LinguaBridge by RIWI expide un <strong>Certificado de Finalización (PDF verificable)</strong> al cumplir:
+            </p>
+            <ul className="space-y-2 text-xs text-foreground/80">
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-success shrink-0" />
+                <span>Asistir al menos al <strong>80% de las clases en vivo</strong> (o 90% de módulos self-paced).</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-success shrink-0" />
+                <span>Obtener una calificación mínima de <strong>70% en el examen final</strong>.</span>
+              </li>
+            </ul>
+            <div className="p-2.5 rounded-xl bg-muted text-[11px] text-muted-foreground border border-border">
+              * Certificado físico impreso opcional: COP 25,000.
+            </div>
           </div>
 
-          <div className="p-6 sm:p-7 rounded-3xl bg-slate-950 border border-slate-800 space-y-4 flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-                  <AlertCircle className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-base text-slate-100">Políticas de Matrícula y Pausas</h4>
-                  <p className="text-xs text-slate-400">Transferencias de horario y garantías</p>
-                </div>
+          <div className="p-6 sm:p-8 rounded-2xl bg-card border border-border space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-accent border border-border flex items-center justify-center text-primary">
+                <AlertCircle className="w-5 h-5" />
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Conoce nuestras políticas flexibles para cambios de horario, pausas de estudio y reembolsos en la primera semana.
-              </p>
+              <div>
+                <h4 className="font-bold text-base text-foreground font-display">Transferencias y Reembolsos</h4>
+                <p className="text-xs text-muted-foreground">Políticas claras y transparentes</p>
+              </div>
             </div>
-
+            <ul className="space-y-2.5 text-xs text-foreground/80">
+              <li className="flex items-start gap-2">
+                <span className="text-primary font-bold">•</span>
+                <span><strong>Cambio de horario o modalidad:</strong> 1 transferencia gratuita por nivel (sujeto a disponibilidad).</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary font-bold">•</span>
+                <span><strong>Reembolsos:</strong> Disponibles únicamente durante la primera semana de la cohorte (menos COP 50,000 administrativos).</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary font-bold">•</span>
+                <span><strong>Pausas:</strong> Después de la 1.ª semana, puedes pausar y retomar el nivel dentro de los siguientes 60 días.</span>
+              </li>
+            </ul>
             <button
-              onClick={() => onAskQuestion("¿Cómo funcionan los cambios de horario y las pausas de estudio?")}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-850 text-slate-200 hover:text-white border border-slate-800 text-xs font-semibold transition-colors cursor-pointer"
+              onClick={() => onAskQuestion("¿Cuáles son las políticas de cancelación y transferencias de horario?")}
+              className="mt-2 text-xs font-bold text-primary hover:text-primary-dark flex items-center gap-1 cursor-pointer transition-colors"
             >
-              <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Consultar Políticas con Lingua</span>
+              <span>Consultar políticas con Lingua</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -121,3 +98,4 @@ export function EnrollmentSteps({ onAskQuestion }) {
     </section>
   );
 }
+

@@ -65,8 +65,9 @@
       "parameters": {
         "operation": "sendMessage",
         "chatId": "6903804752",
-        "text": "=🚨 *NUEVO LEAD / ATENCIÓN HUMANA REQUERIDA*\n\n📝 *Pregunta del Estudiante:*\n{{ $('Webhook - Incoming Question').item.json.body.question }}\n\n💡 *Respuesta de Lingua:*\n{{ $json.answer }}\n\n🏢 *Área:* Admisiones & Ventas Riwi Lingua\n⏰ *Fecha y Hora:* {{ $now.format('yyyy-MM-dd HH:mm:ss') }}",
+        "text": "=🚨 *NUEVO LEAD / ATENCIÓN HUMANA REQUERIDA*\n\n📝 *Pregunta del Estudiante:*\n{{ $('Webhook - Incoming Question').item.json.body.question }}\n\n🏢 *Área:* Admisiones & Ventas Riwi Lingua\n⏰ *Fecha y Hora:* {{ $now.format('yyyy-MM-dd HH:mm:ss') }}",
         "additionalFields": {
+
           "parse_mode": "Markdown"
         }
       },

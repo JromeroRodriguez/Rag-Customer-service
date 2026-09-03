@@ -90,7 +90,7 @@ export function subscribeSession(sessionId, res) {
         if (!activeClients.has(sessionId) && isLiveSession(sessionId)) {
           const studentName = studentNames.get(sessionId) || "El estudiante";
           const studentPhone = studentPhones.get(sessionId);
-          const phoneLine = studentPhone ? `\n📱 *WhatsApp del estudiante:* \`${studentPhone}\`` : "";
+          const phoneLine = studentPhone ? `\n*WhatsApp del estudiante:* \`${studentPhone}\`` : "";
 
           const token = process.env.TELEGRAM_BOT_TOKEN;
           const chatId = process.env.TELEGRAM_ADVISOR_CHAT_ID;
@@ -101,11 +101,12 @@ export function subscribeSession(sessionId, res) {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 chat_id: chatId,
-                text: `📴 *${studentName} (#${sessionId}) cerró la página web o se desconectó.*${phoneLine}`,
+                text: `[DESCONEXIÓN] *${studentName} (#${sessionId}) cerró la página web o se desconectó.*${phoneLine}`,
                 parse_mode: "Markdown",
               }),
             }).catch(() => {});
           }
+
         }
       }, 6000);
     }
@@ -179,19 +180,15 @@ export async function notifyAdvisorTelegram({ sessionId, studentName, studentPho
   // Mark session as live
   setLiveSession(sessionId, true);
 
-  const messageText = `🚨 *NUEVA ATENCIÓN HUMANA REQUERIDA*
-🎫 *Ticket:* \`#${sessionId}\`
-👤 *Estudiante:* *${nameDisplay}*
-📱 *WhatsApp / Tel:* \`${phoneDisplay}\`
+  const messageText = `*NUEVA ATENCIÓN HUMANA REQUERIDA*
+*Ticket:* \`#${sessionId}\`
+*Estudiante:* *${nameDisplay}*
+*WhatsApp / Tel:* \`${phoneDisplay}\`
 
-📝 *Pregunta del Estudiante:*
+*Pregunta del Estudiante:*
 ${question}
 
-💡 *Diagnóstico de Lingua:*
-${answer}
-
-👉 *Para responderle a ${nameDisplay}:* Dale a *Responder (Reply)* a este mensaje con tu respuesta.
-🛑 *Para finalizar la sesión:* Escribe \`/cerrar\` o \`/fin\`.`;
+*Para finalizar la sesión:* Escribe \`/cerrar\` o \`/fin\`.`;
 
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -227,12 +224,13 @@ export async function forwardStudentMessageToAdvisor(sessionId, text) {
 
   const nameDisplay = studentNames.get(sessionId) || "Estudiante";
 
-  const messageText = `💬 *MENSAJE DE ${nameDisplay.toUpperCase()}* (Ticket \`#${sessionId}\`)
+  const messageText = `*MENSAJE DE ${nameDisplay.toUpperCase()}* (Ticket \`#${sessionId}\`)
 
 "${text}"
 
-👉 *Para responderle:* Dale a *Responder (Reply)* a este mensaje.
-🛑 *Para finalizar:* Escribe \`/cerrar\`.`;
+*Para finalizar:* Escribe \`/cerrar\`.`;
+
+
 
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -348,7 +346,7 @@ export function startTelegramListener() {
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     chat_id: msg.chat.id,
-                    text: `🛑 *Has finalizado la atención en vivo con ${nameDisplay}.*\nEl estudiante ha regresado al Asistente Lingua (IA).`,
+                    text: `[SESIÓN FINALIZADA] *Has finalizado la atención en vivo con ${nameDisplay}.*\nEl estudiante ha regresado al Asistente Lingua (IA).`,
                     reply_to_message_id: msg.message_id,
                     parse_mode: "Markdown",
                   }),
@@ -373,12 +371,13 @@ export function startTelegramListener() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   chat_id: msg.chat.id,
-                  text: `✅ *Mensaje entregado en vivo al estudiante en la web*\n💬 "${msg.text}"`,
+                  text: `[ENTREGADO] *Mensaje entregado en vivo al estudiante en la web*\n"${msg.text}"`,
                   reply_to_message_id: msg.message_id,
                   parse_mode: "Markdown",
                 }),
               }).catch(() => {});
             }
+
           }
         }
       } catch (err) {

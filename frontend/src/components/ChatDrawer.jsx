@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { X, Bot, Trash2, Headphones, ArrowLeft } from "lucide-react";
+import { X, Sparkles, Trash2, Headphones, ArrowLeft, Bot } from "lucide-react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { SuggestedPrompts } from "./SuggestedPrompts";
@@ -13,6 +13,8 @@ export function ChatDrawer({
   onReset,
   isLiveAdvisorActive = false,
   onEndLiveAdvisor,
+  pendingEscalation,
+  onRequestAdvisor,
 }) {
   const messagesEndRef = useRef(null);
 
@@ -24,51 +26,66 @@ export function ChatDrawer({
 
   if (!isOpen) return null;
 
+  const inputPlaceholder = isLiveAdvisorActive
+    ? "Escribe tu mensaje para el asesor humano..."
+    : pendingEscalation?.step === "name"
+    ? "Escribe tu nombre y apellido (ej. Carlos Pérez)..."
+    : pendingEscalation?.step === "phone"
+    ? "Escribe tu WhatsApp de 10 dígitos (ej. 300 123 4567)..."
+    : "Escribe tu pregunta sobre programas, precios o matrícula...";
+
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/75 backdrop-blur-md transition-opacity">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-navy/60 backdrop-blur-xs transition-opacity">
       {/* Centered Modal Card */}
-      <div className="w-full max-w-3xl h-[92vh] sm:h-[85vh] bg-slate-950 rounded-3xl border border-slate-800 shadow-2xl shadow-black/80 flex flex-col justify-between overflow-hidden animate-in zoom-in-95 fade-in duration-200">
+      <div className="w-full max-w-3xl h-[92vh] sm:h-[85vh] bg-background rounded-2xl border border-border shadow-2xl flex flex-col justify-between overflow-hidden animate-in zoom-in-95 fade-in duration-200">
         {/* Modal Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between gap-3">
+        <header className="p-4 sm:p-5 border-b border-border bg-card flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div
-              className={`relative flex items-center justify-center w-10 h-10 rounded-xl p-0.5 shadow-md ${
+              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
                 isLiveAdvisorActive
-                  ? "bg-gradient-to-tr from-emerald-600 to-teal-400"
-                  : "bg-gradient-to-tr from-blue-600 to-cyan-400"
+                  ? "bg-emerald-600 text-white"
+                  : "bg-primary text-primary-foreground"
               }`}
             >
-              <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                {isLiveAdvisorActive ? (
-                  <Headphones className="w-5 h-5 text-emerald-400" />
-                ) : (
-                  <Bot className="w-5 h-5 text-cyan-400" />
-                )}
-              </div>
+              {isLiveAdvisorActive ? (
+                <Headphones className="h-5 w-5" />
+              ) : (
+                <Bot className="h-5 w-5" />
+              )}
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-violet-600 text-white uppercase">
-                  RIWI
-                </span>
-                <h3 className="font-bold text-sm sm:text-base text-slate-100">
-                  {isLiveAdvisorActive ? "Asesor Humano en Vivo" : "Lingua Assistant"}
-                </h3>
-              </div>
-              <p className="text-[11px] text-slate-400">
+              <h2 className="font-heading font-bold text-base text-foreground leading-tight">
                 {isLiveAdvisorActive
-                  ? "Conectado directamente vía Telegram"
-                  : "Asistente Virtual • Atención en Tiempo Real"}
+                  ? "Atención con Asesor Humano"
+                  : "Lingua — Asistente Virtual"}
+              </h2>
+              <p className="text-[12px] text-muted-foreground">
+                {isLiveAdvisorActive
+                  ? "Conectado en tiempo real vía Telegram"
+                  : "Respuestas oficiales basadas en la academia"}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
+            {!isLiveAdvisorActive && !pendingEscalation && onRequestAdvisor && (
+              <button
+                onClick={onRequestAdvisor}
+                title="Hablar con un asesor humano en vivo"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 border border-emerald-500/20 text-xs font-semibold transition-all duration-150 cursor-pointer"
+              >
+                <Headphones className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden sm:inline">Hablar con Asesor</span>
+                <span className="sm:hidden">Asesor</span>
+              </button>
+            )}
             {messages.length > 1 && (
               <button
                 onClick={onReset}
                 title="Limpiar conversación"
-                className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                className="p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -76,32 +93,53 @@ export function ChatDrawer({
             <button
               onClick={onClose}
               title="Cerrar ventana"
-              className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-slate-100 transition-colors cursor-pointer"
+              className="p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
-        </div>
+        </header>
 
         {/* Live Advisor Active Banner */}
         {isLiveAdvisorActive && (
-          <div className="px-4 py-2 bg-emerald-950/40 border-b border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300">
+          <div className="px-4 py-2.5 bg-emerald-500/10 border-b border-emerald-500/20 flex items-center justify-between text-xs text-emerald-800">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
-              <span className="font-semibold">Chat en Vivo Activo con Asesor Humano</span>
+              <span className="font-semibold">Atención en vivo con asesor humano</span>
             </div>
             {onEndLiveAdvisor && (
               <button
                 onClick={onEndLiveAdvisor}
-                className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-medium transition-colors text-[11px] cursor-pointer flex items-center gap-1"
+                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition-colors text-[11px] cursor-pointer flex items-center gap-1"
               >
                 <ArrowLeft className="w-3 h-3" />
-                <span>Volver a Asistente IA</span>
+                <span>Volver al Asistente Virtual</span>
               </button>
             )}
+          </div>
+        )}
+
+        {/* Escalation Lead Capture Step Banner */}
+        {pendingEscalation && !isLiveAdvisorActive && (
+          <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 flex items-center justify-between text-xs text-amber-900">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-amber-500"></span>
+              <span className="font-semibold">
+                {pendingEscalation.step === "name"
+                  ? "Paso 1 de 2: Escribe tu Nombre y Apellido completo"
+                  : "Paso 2 de 2: Escribe tu número de WhatsApp (10 dígitos)"}
+
+              </span>
+            </div>
+            <button
+              onClick={() => onSendMessage("cancelar")}
+              className="text-[11px] text-amber-800 hover:text-amber-950 underline cursor-pointer"
+            >
+              Cancelar
+            </button>
           </div>
         )}
 
@@ -111,33 +149,25 @@ export function ChatDrawer({
             <ChatMessage key={msg.id} message={msg} />
           ))}
 
-          {isLoading && !isLiveAdvisorActive && (
-            <div className="flex gap-3 p-4 rounded-2xl bg-slate-900/70 border border-slate-800 animate-pulse">
-              <div className="w-7 h-7 rounded-lg bg-blue-600/30 flex items-center justify-center text-blue-400">
-                <Bot className="w-3.5 h-3.5 animate-spin" />
-              </div>
-              <div className="flex-1 space-y-2 py-1">
-                <span className="text-xs font-semibold text-slate-400">Consultando información oficial...</span>
-                <div className="h-2 bg-slate-800 rounded-full w-3/4"></div>
-              </div>
+          {isLoading && !isLiveAdvisorActive && !messages.some((m) => m.isStreaming) && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Sparkles className="h-4 w-4 animate-spin text-primary" />
+              Lingua está consultando la base de conocimiento...
             </div>
           )}
           <div ref={messagesEndRef} />
         </div>
 
         {/* Bottom Area: Suggestions + Input */}
-        <div className="p-3 sm:p-5 border-t border-slate-800 bg-slate-900/90 space-y-3">
-          {!isLiveAdvisorActive && (
+        <div className="p-3 sm:p-5 border-t border-border bg-card space-y-3">
+          {!isLiveAdvisorActive && !pendingEscalation && (
             <SuggestedPrompts onSelect={onSendMessage} disabled={isLoading} />
           )}
+
           <ChatInput
             onSendMessage={onSendMessage}
             isLoading={isLoading && !isLiveAdvisorActive}
-            placeholder={
-              isLiveAdvisorActive
-                ? "Escribe tu mensaje para el asesor humano..."
-                : "Escribe tu pregunta sobre Riwi Lingua..."
-            }
+            placeholder={inputPlaceholder}
           />
         </div>
       </div>

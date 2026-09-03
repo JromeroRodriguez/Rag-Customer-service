@@ -16,9 +16,8 @@ app.use(cors());
 app.use(express.json());
 
 const distDir = path.resolve(__dirname, "..", "..", "frontend", "dist");
-const publicDir = path.resolve(__dirname, "..", "..", "public");
-const staticDir = fs.existsSync(distDir) ? distDir : publicDir;
-app.use(express.static(staticDir));
+app.use(express.static(distDir));
+
 
 app.use("/api", queryRouter);
 app.use("/api/live-chat", liveChatRouter);

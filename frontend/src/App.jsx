@@ -7,27 +7,21 @@ import { PricingSection } from "./components/PricingSection";
 import { EnrollmentSteps } from "./components/EnrollmentSteps";
 import { Footer } from "./components/Footer";
 import { ChatDrawer } from "./components/ChatDrawer";
-import { Bot } from "lucide-react";
+import { MessageSquare } from "lucide-react";
+import { WELCOME_MESSAGE } from "./lib/riwi-data.js";
+import { validateStudentName, validateStudentPhone } from "./lib/validation.js";
+
 
 export function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLiveAdvisorActive, setIsLiveAdvisorActive] = useState(false);
+
   const [sessionId, setSessionId] = useState(() => {
     try { sessionStorage.clear(); } catch {}
     return "std_" + Math.random().toString(36).substring(2, 8);
   });
 
-  const [messages, setMessages] = useState([
-    {
-      id: "welcome-1",
-      role: "assistant",
-      content:
-        "¡Hola! Soy Lingua, la asistente virtual de **Riwi Lingua** en Barranquilla.\n\nPuedo orientarte sobre nuestros programas de **Inglés, Francés y Portugués**, precios, modalidades (Presencial, Live Online y Self-Paced), horarios, requisitos de certificación y proceso de matrícula.\n\n¿En qué te puedo colaborar hoy?",
-      timestamp: "Inicio",
-      escalated: false,
-      sources: ["schedules-and-modalities.md", "pricing-and-levels.md"],
-    },
-  ]);
+  const [messages, setMessages] = useState([WELCOME_MESSAGE]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Subscribe to real-time live chat SSE stream + Polling fallback for human advisor replies
@@ -67,7 +61,7 @@ export function App() {
         }
       });
 
-      // Mejora 3: Handle /cerrar from advisor in Telegram
+      // Handle /cerrar from advisor in Telegram
       eventSource.addEventListener("live_ended", () => {
         setIsLiveAdvisorActive(false);
         setMessages((prev) => [
@@ -138,8 +132,29 @@ export function App() {
     ]);
   };
 
+  const handleRequestAdvisor = () => {
+    if (isLiveAdvisorActive) return;
+    setPendingEscalation({
+      step: "name",
+      question: "Solicitud directa de asesor humano desde el chat",
+      answer: "El estudiante solicitó comunicarse con un asesor humano.",
+    });
+
+    const advisorPromptMsg = {
+      id: `req-${Date.now()}`,
+      role: "assistant",
+      content:
+        "¡Con gusto te comunico con un asesor humano de admisiones y ventas de **Riwi Lingua**! Para poder atenderte de forma personalizada, **¿cuál es tu nombre y apellido?**",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    setMessages((prev) => [...prev, advisorPromptMsg]);
+    setIsDrawerOpen(true);
+  };
+
   const handleSendMessage = async (questionText) => {
     if (!questionText.trim() || isLoading) return;
+
 
     const userMsg = {
       id: Date.now().toString(),
@@ -151,23 +166,49 @@ export function App() {
 
     setMessages((prev) => [...prev, userMsg]);
 
-    // Mejora 2: Captura en dos pasos (Nombre -> WhatsApp) antes de conectar al asesor
+    // Captura en dos pasos (Nombre -> WhatsApp) antes de conectar al asesor
     if (pendingEscalation) {
       const inputVal = questionText.trim();
 
+      // Opción de cancelar la solicitud de asesor y volver al bot
+      if (["cancelar", "salir", "volver", "no gracias"].includes(inputVal.toLowerCase())) {
+        setPendingEscalation(null);
+        const cancelMsg = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: "Entendido, cancelamos la transferencia a un asesor humano. Puedes seguir consultándome libremente sobre programas, horarios, precios o certificaciones de **Riwi Lingua**. ¿En qué más te puedo colaborar?",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setMessages((prev) => [...prev, cancelMsg]);
+        return;
+      }
+
       if (pendingEscalation.step === "name") {
-        setStudentName(inputVal);
+        const check = validateStudentName(inputVal);
+        if (!check.valid) {
+          const errMsg = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: `**Nombre no válido**: ${check.error}\n\n*(Escribe tu nombre y apellido, o escribe **cancelar** si prefieres no continuar).*`,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          };
+          setMessages((prev) => [...prev, errMsg]);
+          return;
+        }
+
+        const validName = check.sanitized;
+        setStudentName(validName);
         setPendingEscalation({
           step: "phone",
           question: pendingEscalation.question,
           answer: pendingEscalation.answer,
-          studentName: inputVal,
+          studentName: validName,
         });
 
         const askPhoneMsg = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: `¡Mucho gusto, **${inputVal}**! Por favor indícanos tu **número de WhatsApp o teléfono celular** para que el asesor pueda enviarte la cotización o contactarte si se interrumpe la conexión:`,
+          content: `Mucho gusto, **${validName}**. Por favor indícanos tu **número de WhatsApp** (10 dígitos, estándar colombiano, ej: \`300 123 4567\`):`,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         };
         setMessages((prev) => [...prev, askPhoneMsg]);
@@ -175,17 +216,32 @@ export function App() {
       }
 
       if (pendingEscalation.step === "phone") {
-        setStudentPhone(inputVal);
+        const check = validateStudentPhone(inputVal);
+        if (!check.valid) {
+          const errMsg = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: `**WhatsApp no válido**: ${check.error}\n\n*(Ingresa los 10 dígitos de tu celular en Colombia, o escribe **cancelar** para regresar al asistente).*`,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          };
+          setMessages((prev) => [...prev, errMsg]);
+          return;
+        }
+
+
+
+        const validPhone = check.sanitized;
+        setStudentPhone(validPhone);
         const nameToUse = pendingEscalation.studentName || studentName || "Estudiante";
 
-        // Enviar alerta a Telegram con Nombre + WhatsApp completos
+        // Enviar alerta a Telegram con Nombre + WhatsApp validados
         fetch("/api/live-chat/escalate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sessionId,
             studentName: nameToUse,
-            studentPhone: inputVal,
+            studentPhone: validPhone,
             question: pendingEscalation.question,
             answer: pendingEscalation.answer,
           }),
@@ -197,13 +253,14 @@ export function App() {
         const confirmMsg = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: `¡Excelente, **${nameToUse}**! Tu solicitud ya fue enviada a nuestro asesor humano en Telegram con tu número de contacto (\`${inputVal}\`).\n\nEn un momento te responderá directamente por aquí en vivo.`,
+          content: `¡Excelente, **${nameToUse}**! Tu solicitud ya fue enviada a nuestro asesor humano en Telegram con tu número de contacto (\`${validPhone}\`).\n\nEn un momento te responderá directamente por aquí en vivo.`,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         };
         setMessages((prev) => [...prev, confirmMsg]);
         return;
       }
     }
+
 
     // If already talking with a live human advisor, forward directly to Telegram (NO LLM)
     if (isLiveAdvisorActive) {
@@ -221,60 +278,203 @@ export function App() {
 
     setIsLoading(true);
 
+    const assistantMsgId = `asst-${Date.now()}`;
+    const placeholderMsg = {
+      id: assistantMsgId,
+      role: "assistant",
+      content: "",
+      isStreaming: true,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    setMessages((prev) => [...prev, placeholderMsg]);
+
+    // Build recent conversation history for Multi-turn RAG
+    const conversationHistory = messages
+      .filter((m) => m && (m.role === "user" || m.role === "assistant"))
+      .map((m) => ({ role: m.role, content: m.content }));
+
     try {
       const res = await fetch("/api/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: questionText, sessionId, studentName }),
+        body: JSON.stringify({
+          question: questionText,
+          sessionId,
+          studentName,
+          history: conversationHistory,
+          stream: true,
+        }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.error || "Error en el procesamiento de la consulta.");
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Error en el servidor: ${res.status}`);
       }
 
-      // If escalation requires the student's name, ask for it before alerting Telegram
-      if (data.requiresName) {
-        setPendingEscalation({ step: "name", question: questionText, answer: data.answer });
-        const namePromptMsg = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content:
-            "Con gusto te conecto con un asesor humano de admisiones y ventas. Para poder atenderte mejor, **¿cuál es tu nombre completo?**",
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        };
-        setMessages((prev) => [...prev, namePromptMsg]);
-        return;
-      }
+      // Check if response is an SSE stream
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("text/event-stream") && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let accumulatedContent = "";
+        let finalData = null;
 
-      if (data.escalated) {
-        setIsLiveAdvisorActive(true);
-      }
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
 
-      if (data.answer) {
-        const assistantMsg = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: data.answer,
-          escalated: Boolean(data.escalated),
-          sources: data.sources || [],
-          usage: data.usage || null,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split("\n\n");
+          buffer = events.pop() || "";
+
+          for (const evt of events) {
+            const lines = evt.split("\n");
+            let eventName = "message";
+            let eventData = "";
+
+            for (const line of lines) {
+              if (line.startsWith("event:")) {
+                eventName = line.replace("event:", "").trim();
+              } else if (line.startsWith("data:")) {
+                eventData = line.replace("data:", "").trim();
+              }
+            }
+
+            if (!eventData) continue;
+
+            try {
+              const parsed = JSON.parse(eventData);
+              if (eventName === "chunk" && parsed.content) {
+                accumulatedContent += parsed.content;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMsgId
+                      ? { ...m, content: accumulatedContent, isStreaming: true }
+                      : m
+                  )
+                );
+              } else if (eventName === "done") {
+                finalData = parsed;
+              } else if (eventName === "error") {
+                throw new Error(parsed.error || "Error en el procesamiento del stream.");
+              }
+            } catch (err) {
+              console.warn("Error parsing stream chunk:", err);
+            }
+          }
+        }
+
+        // Apply final stream metadata
+        if (finalData) {
+          if (finalData.requiresName) {
+            setPendingEscalation({ step: "name", question: questionText, answer: finalData.answer });
+            const promptNameText = finalData.answer
+              ? `${finalData.answer}\n\nPara comunicarte con nuestro asesor, **¿cuál es tu nombre completo?**`
+              : "Con gusto te conecto con un asesor humano de admisiones y ventas. Para poder atenderte mejor, **¿cuál es tu nombre completo?**";
+
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      content: promptNameText,
+                      isStreaming: false,
+                      escalated: true,
+                      sources: finalData.sources || [],
+                    }
+                  : m
+              )
+            );
+          } else {
+            if (finalData.escalated) {
+              setIsLiveAdvisorActive(true);
+            }
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      content: finalData.answer || accumulatedContent,
+                      isStreaming: false,
+                      escalated: Boolean(finalData.escalated),
+                      sources: finalData.sources || [],
+                      usage: finalData.usage || null,
+                    }
+                  : m
+              )
+            );
+          }
+        } else {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsgId
+                ? { ...m, isStreaming: false, content: accumulatedContent }
+                : m
+            )
+          );
+        }
+      } else {
+        // Fallback for non-stream JSON responses
+        const data = await res.json();
+
+        if (data.requiresName) {
+          setPendingEscalation({ step: "name", question: questionText, answer: data.answer });
+          const namePromptMsg = data.answer
+            ? `${data.answer}\n\nPara comunicarte con nuestro asesor, **¿cuál es tu nombre completo?**`
+            : "Con gusto te conecto con un asesor humano de admisiones y ventas. Para poder atenderte mejor, **¿cuál es tu nombre completo?**";
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsgId
+                ? {
+                    ...m,
+                    content: namePromptMsg,
+                    isStreaming: false,
+                    escalated: true,
+                    sources: data.sources || [],
+                  }
+                : m
+            )
+          );
+          return;
+        }
+
+        if (data.escalated) {
+          setIsLiveAdvisorActive(true);
+        }
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? {
+                  ...m,
+                  content: data.answer,
+                  isStreaming: false,
+                  escalated: Boolean(data.escalated),
+                  sources: data.sources || [],
+                  usage: data.usage || null,
+                }
+              : m
+          )
+        );
       }
     } catch (err) {
       console.error("Query error:", err);
-      const errorMsg = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: `Disculpa, ocurrió un error técnico al consultar la base de conocimiento: ${err.message}. Verifica que el backend y el servicio estén activos.`,
-        escalated: true,
-        sources: [],
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMsgId
+            ? {
+                ...m,
+                content: `Disculpa, ocurrió un error técnico al consultar la base de conocimiento: ${err.message}. Verifica que el backend y el servicio estén activos.`,
+                isStreaming: false,
+                escalated: true,
+                sources: [],
+              }
+            : m
+        )
+      );
     } finally {
       setIsLoading(false);
     }
@@ -294,17 +494,7 @@ export function App() {
     setPendingEscalation(null);
     sessionStorage.removeItem("riwi_student_name");
 
-    setMessages([
-      {
-        id: "welcome-1",
-        role: "assistant",
-        content:
-          "¡Hola! Soy Lingua, la asistente virtual de **Riwi Lingua** en Barranquilla.\n\nPuedo orientarte sobre nuestros programas de **Inglés, Francés y Portugués**, precios, modalidades (Presencial, Live Online y Self-Paced), horarios, requisitos de certificación y proceso de matrícula.\n\n¿En qué te puedo colaborar hoy?",
-        timestamp: "Inicio",
-        escalated: false,
-        sources: ["schedules-and-modalities.md", "pricing-and-levels.md"],
-      },
-    ]);
+    setMessages([WELCOME_MESSAGE]);
   };
 
   const handleAskQuestionFromHome = (prompt) => {
@@ -313,7 +503,7 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-blue-500/30 flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary/20 selection:text-primary">
       {/* Universal Top Navigation */}
       <Navbar onOpenChat={() => setIsDrawerOpen(true)} />
 
@@ -332,29 +522,27 @@ export function App() {
       {/* Footer */}
       <Footer onOpenChat={() => setIsDrawerOpen(true)} />
 
-      {/* Floating Action Button for Assistant */}
+      {/* Floating Action Button for Assistant (when modal is closed) */}
       {!isDrawerOpen && (
         <div className="fixed bottom-6 right-6 z-40">
           <button
             onClick={() => setIsDrawerOpen(true)}
-            className="group flex items-center gap-3 px-4 py-3.5 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 text-white font-bold text-sm shadow-2xl shadow-blue-500/40 hover:scale-105 transition-all duration-200 cursor-pointer border border-cyan-400/30"
+            className="group flex items-center gap-2.5 px-4 py-3 rounded-full bg-primary hover:bg-primary-dark text-primary-foreground font-bold text-xs sm:text-sm shadow-xl hover:shadow-2xl transition-all duration-200 cursor-pointer border border-white/20"
+            aria-label="Abrir asistente"
           >
-            <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-slate-950 text-cyan-400">
-              <Bot className="w-4 h-4 group-hover:rotate-12 transition-transform" />
-              <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            <div className="relative flex items-center justify-center w-7 h-7 rounded-full bg-white/20 text-white">
+              <MessageSquare className="w-4 h-4 group-hover:scale-110 transition-transform" />
+              <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
               </span>
             </div>
-            <div className="text-left leading-tight hidden sm:block">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-cyan-200">¿Dudas? Pregunta a</div>
-              <div className="text-xs font-extrabold text-white">Riwi Lingua</div>
-            </div>
+            <span className="hidden sm:inline">Consultar con Lingua</span>
           </button>
         </div>
       )}
 
-      {/* Slide-over Chat Drawer */}
+      {/* Slide-over / Modal Chat Drawer */}
       <ChatDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
@@ -364,9 +552,15 @@ export function App() {
         onReset={handleReset}
         isLiveAdvisorActive={isLiveAdvisorActive}
         onEndLiveAdvisor={handleEndLiveAdvisor}
+        pendingEscalation={pendingEscalation}
+        onRequestAdvisor={handleRequestAdvisor}
       />
+
+
     </div>
   );
 }
 
 export default App;
+
+

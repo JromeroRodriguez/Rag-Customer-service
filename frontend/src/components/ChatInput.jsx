@@ -1,22 +1,15 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Loader2, Sparkles } from "lucide-react";
+import { Send, Loader2 } from "lucide-react";
 
 export function ChatInput({ onSendMessage, isLoading, placeholder }) {
   const [input, setInput] = useState("");
-  const textareaRef = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
-    if (!isLoading && textareaRef.current) {
-      textareaRef.current.focus();
+    if (!isLoading && inputRef.current) {
+      inputRef.current.focus();
     }
   }, [isLoading]);
-
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit(e);
-    }
-  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -27,34 +20,24 @@ export function ChatInput({ onSendMessage, isLoading, placeholder }) {
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="relative flex items-end gap-2 p-2.5 sm:p-3 rounded-2xl bg-slate-900/95 border border-slate-800 focus-within:border-blue-500/80 shadow-xl shadow-slate-950/80 transition-all duration-150"
-    >
-      <textarea
-        ref={textareaRef}
-        rows={1}
+    <form onSubmit={handleSubmit} className="flex items-center gap-2">
+      <input
+        ref={inputRef}
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder || "Pregunta sobre cursos, precios, horarios, certificaciones..."}
+        placeholder={placeholder || "Escribe tu pregunta sobre programas, precios o matrícula..."}
         disabled={isLoading}
-        className="w-full resize-none bg-transparent px-2 sm:px-3 py-1.5 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none max-h-32 disabled:opacity-50"
+        className="flex-1 rounded-xl border border-input bg-background px-4 py-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary disabled:opacity-50"
       />
-
-      <div className="flex items-center gap-1.5 shrink-0">
-        <button
-          type="submit"
-          disabled={!input.trim() || isLoading}
-          className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium shadow-md shadow-blue-500/25 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-        >
-          {isLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Send className="w-4 h-4" />
-          )}
-        </button>
-      </div>
+      <button
+        type="submit"
+        disabled={isLoading || !input.trim()}
+        className="flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary text-primary-foreground transition-colors hover:bg-primary-dark disabled:opacity-40"
+        aria-label="Enviar pregunta"
+      >
+        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+      </button>
     </form>
   );
 }
+

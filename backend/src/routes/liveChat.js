@@ -2,11 +2,11 @@ import { Router } from "express";
 import {
   subscribeSession,
   getSessionMessages,
-  sendAdvisorMessage,
   setLiveSession,
   notifyAdvisorTelegram,
   resetSession,
 } from "../services/liveChat.js";
+import { validateStudentName, validateStudentPhone } from "../services/validation.js";
 
 export const liveChatRouter = Router();
 
@@ -38,16 +38,6 @@ liveChatRouter.get("/messages/:sessionId", (req, res) => {
   res.json({ messages });
 });
 
-// Broadcast / send endpoint
-liveChatRouter.post("/send", (req, res) => {
-  const { sessionId, text } = req.body ?? {};
-  if (!text) {
-    return res.status(400).json({ error: "Text is required." });
-  }
-
-  sendAdvisorMessage(sessionId, text);
-  res.json({ success: true });
-});
 
 // Trigger escalation with student name and phone/WhatsApp
 liveChatRouter.post("/escalate", async (req, res) => {
@@ -56,9 +46,26 @@ liveChatRouter.post("/escalate", async (req, res) => {
     return res.status(400).json({ error: "Session ID is required." });
   }
 
-  const sent = await notifyAdvisorTelegram({ sessionId, studentName, studentPhone, question, answer });
-  res.json({ success: sent, studentName, studentPhone });
+  const nameCheck = validateStudentName(studentName);
+  if (!nameCheck.valid) {
+    return res.status(400).json({ error: nameCheck.error });
+  }
+
+  const phoneCheck = validateStudentPhone(studentPhone);
+  if (!phoneCheck.valid) {
+    return res.status(400).json({ error: phoneCheck.error });
+  }
+
+  const sent = await notifyAdvisorTelegram({
+    sessionId,
+    studentName: nameCheck.sanitized,
+    studentPhone: phoneCheck.sanitized,
+    question,
+    answer,
+  });
+  res.json({ success: sent, studentName: nameCheck.sanitized, studentPhone: phoneCheck.sanitized });
 });
+
 
 // End live advisor mode and return to LLM
 liveChatRouter.post("/end/:sessionId", (req, res) => {
